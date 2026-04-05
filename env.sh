@@ -15,6 +15,11 @@ function __setpaths() {
   export PATH=${DIR}/tools/install/yosys/bin:$PATH
   export PATH=${DIR}/tools/install/kepler-formal/bin:$PATH
 
+  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Prefer the system C++ runtime over Conda's older libstdc++.
+    export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+  fi
+
   if [[ "$OSTYPE" == "darwin"* ]]; then
     export PATH="/Applications/KLayout/klayout.app/Contents/MacOS:$PATH"
     export PATH="$(brew --prefix bison)/bin:$(brew --prefix flex)/bin:$(brew --prefix tcl-tk)/bin:$PATH"

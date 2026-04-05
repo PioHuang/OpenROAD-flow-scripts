@@ -84,8 +84,14 @@ if { !$::env(SYNTH_HIERARCHICAL) } {
     keep_hierarchy
   }
 
-  # Re-run coarse-level script, this time do pass -flatten
-  synth -flatten -run coarse:fine {*}$synth_full_args
+  # Re-run coarse-level script.
+  # Default behavior flattens hierarchy; optionally preserve it for
+  # downstream hierarchical constraints/analysis.
+  if { [env_var_equals SYNTH_PRESERVE_RTL_HIERARCHY 1] } {
+    synth -run coarse:fine {*}$synth_full_args
+  } else {
+    synth -flatten -run coarse:fine {*}$synth_full_args
+  }
 }
 
 

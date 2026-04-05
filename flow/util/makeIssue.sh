@@ -14,6 +14,7 @@ ISSUE_CP_DESIGN_FILE_VARS="SDC_FILE \
                            VERILOG_FILES \
                            SYNTH_NETLIST_FILES \
                            FOOTPRINT_TCL \
+                           SOFT_MODULE_REGIONS_TCL \
                            FOOTPRINT \
                            SIG_MAP_FILE \
                            IO_CONSTRAINTS \

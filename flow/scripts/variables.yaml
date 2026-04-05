@@ -171,6 +171,14 @@ SYNTH_HIERARCHICAL:
   stages:
     - synth
   default: 0
+SYNTH_PRESERVE_RTL_HIERARCHY:
+  description: >
+    Used with SYNTH_HIERARCHICAL=1. If set to 1, skips the explicit
+    synthesis flatten pass in synth.tcl to preserve hierarchy names/modules
+    in synthesized outputs for downstream hierarchy-based constraints.
+  stages:
+    - synth
+  default: 0
 SYNTH_MEMORY_MAX_BITS:
   description: >
     Maximum number of bits for memory synthesis.
@@ -1368,6 +1376,15 @@ FOOTPRINT:
 FOOTPRINT_TCL:
   description: |
     Specifies a Tcl script with custom footprint-related commands for floorplan setup.
+  stages:
+    - floorplan
+SOFT_MODULE_REGIONS_TCL:
+  description: |
+    Tcl script sourced during floorplan after rows/tracks exist. Should call
+    add_soft_module_region to define rectangles (microns) and hierarchical
+    instance patterns for soft modules. Uses ODB region types EXCLUSIVE
+    (hard fence, DEF FENCE) or SUGGESTED (softer guide, DEF GUIDE). See
+    scripts/soft_module_regions.tcl.
   stages:
     - floorplan
 FLOW_VARIANT:

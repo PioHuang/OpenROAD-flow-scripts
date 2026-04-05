@@ -22,3 +22,17 @@ foreach net [$block getNets] {
 report_design_area
 
 orfs_write_db $::env(RESULTS_DIR)/2_4_floorplan_pdn.odb
+
+# Optional second ODB with soft module dbRegion/dbGroup for floorplan GUI review only.
+# Placement must load the clean 2_4_floorplan_pdn.odb (no regions) to avoid GPL-0301.
+if { ![env_var_equals WRITE_SOFT_REGION_FLOORPLAN_PREVIEW 0] } {
+  if { [info exists ::env(SOFT_MODULE_REGIONS_TCL)] && $::env(SOFT_MODULE_REGIONS_TCL) != "" } {
+    set sr $::env(SOFT_MODULE_REGIONS_TCL)
+    if { [file exists $sr] && [file size $sr] > 0 } {
+      source $::env(SCRIPTS_DIR)/soft_module_regions.tcl
+      source $sr
+      orfs_write_db $::env(RESULTS_DIR)/2_4_floorplan_pdn_soft_preview.odb
+      puts "Wrote soft-region floorplan preview: $::env(RESULTS_DIR)/2_4_floorplan_pdn_soft_preview.odb"
+    }
+  }
+}

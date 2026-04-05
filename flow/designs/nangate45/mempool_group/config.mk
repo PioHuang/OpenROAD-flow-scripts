@@ -3,6 +3,11 @@ export DESIGN_NICKNAME = mempool_group
 export PLATFORM    = nangate45
 
 export SYNTH_HIERARCHICAL = 1
+# Keep flattened netlist for stable OpenROAD placement, but preserve hierarchy
+# information in flattened instance names using SYNTH_HIER_SEPARATOR.
+export SYNTH_PRESERVE_RTL_HIERARCHY = 1
+export SYNTH_HIER_SEPARATOR = /
+export OPENROAD_HIERARCHICAL = 0
 
 export TEMP_DESIGN_DIR = $(DESIGN_HOME)/$(PLATFORM)/$(DESIGN_NICKNAME)
 
