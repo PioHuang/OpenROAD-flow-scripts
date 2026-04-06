@@ -105,3 +105,6 @@ bazel-testlogs
 
 # python venv
 venv/
+
+# research/ C++ CMake build
+research/build/
