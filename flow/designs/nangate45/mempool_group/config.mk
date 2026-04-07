@@ -100,7 +100,7 @@ export GLOBAL_PLACEMENT_ARGS = -disable_pin_density_adjust
 # export DPO_MAX_DISPLACEMENT = 5
 
 # Nudge density / padding (defaults come from variables.mk; uncomment to override).
-export PLACE_DENSITY = 0.40
+export PLACE_DENSITY = 0.3
 # export CELL_PAD_IN_SITES_GLOBAL_PLACEMENT = 0
 
 # --- RTLMP cluster sizing (macro_place_util.tcl → rtl_macro_placer); rerun floorplan after change ---

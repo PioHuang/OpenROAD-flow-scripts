@@ -32,6 +32,7 @@ rtl_macro_placer \
 
 set out_csv ./reports/nangate45/mempool_group/base/rtlmp_cluster_groups.csv
 set out_txt ./reports/nangate45/mempool_group/base/rtlmp_cluster_membership.txt
+set out_flat ./reports/nangate45/mempool_group/base/rtlmp_instance_to_cluster.txt
 set block [ord::get_db_block]
 
 proc csv_escape {s} {
@@ -64,6 +65,36 @@ proc dump_group_recursive {group parent_name depth fcsv ftxt} {
   }
 }
 
+# Build a flat map: instance -> most specific (deepest) VISUAL_DEBUG group id.
+# This is easier to consume than the hierarchy dump and gives robust coverage checks.
+proc collect_group_membership {group depth group_name_to_id_var inst_best_depth_name_var} {
+  upvar 1 $group_name_to_id_var group_name_to_id
+  upvar 1 $inst_best_depth_name_var inst_best
+
+  set gname [$group getName]
+  if {![dict exists $group_name_to_id $gname]} {
+    set gid [dict size $group_name_to_id]
+    dict set group_name_to_id $gname $gid
+  }
+  set gid [dict get $group_name_to_id $gname]
+
+  foreach inst [$group getInsts] {
+    set iname [$inst getName]
+    if {![dict exists $inst_best $iname]} {
+      dict set inst_best $iname [list $depth $gid $gname]
+    } else {
+      lassign [dict get $inst_best $iname] best_depth best_gid best_gname
+      if {$depth > $best_depth} {
+        dict set inst_best $iname [list $depth $gid $gname]
+      }
+    }
+  }
+
+  foreach child [$group getGroups] {
+    collect_group_membership $child [expr {$depth + 1}] group_name_to_id inst_best
+  }
+}
+
 set fcsv [open $out_csv w]
 puts $fcsv "group_name,parent_group,group_type,depth,direct_inst_count,child_group_count"
 
@@ -87,5 +118,21 @@ foreach group $top_groups {
 
 close $fcsv
 close $ftxt
+
+set fflat [open $out_flat w]
+puts $fflat "# instance cluster_id cluster_name depth"
+set group_name_to_id {}
+set inst_best {}
+foreach group $top_groups {
+  collect_group_membership $group 0 group_name_to_id inst_best
+}
+set assigned 0
+foreach iname [lsort -dictionary [dict keys $inst_best]] {
+  lassign [dict get $inst_best $iname] d gid gname
+  puts $fflat "$iname $gid $gname $d"
+  incr assigned
+}
+close $fflat
+puts "Wrote $out_flat ($assigned instances)."
 
 write_db ./results/nangate45/mempool_group/base/2_2_floorplan_macro_rtlmp_extract.odb

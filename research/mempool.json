@@ -31,7 +31,8 @@
     "pdn_tcl": "research/design/platforms/nangate45/tcl/grid_strategy-M1-M4-M7.tcl"
   },
   "pwr": [],
-  "groups": "research/design/artifacts/nangate45/mempool_group/base/rtlmp_cluster_membership.txt",
+  "report_power_instances_tsv": "flow/reports/nangate45/mempool_group/base/report_power_instances.tsv",
+  "groups": "flow/reports/nangate45/mempool_group/base/rtlmp_instance_to_cluster.txt",
   "fp_dbu_per_um": 2000,
   "rtl_fp": "research/design/artifacts/nangate45/mempool_group/base/root.fp.txt"
 }

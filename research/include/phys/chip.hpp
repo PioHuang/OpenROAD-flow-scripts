@@ -113,10 +113,32 @@ class Tech {
   std::vector<Stripe> stripes;
 };
 
-class PwrEntry {
+/// Per-instance power breakdown from OpenSTA report_power (-instances).
+class InstPower {
  public:
-  std::string inst;
-  double w{};
+  double internal_W{};
+  double switching_W{};
+  double leakage_W{};
+  double total_W{};
+  // Optional; sometimes derived as total_W / VDD.
+  double current_A{};
+  bool has_current{};
+};
+
+/// Unified per-instance data assembled from multiple inputs (groups/power/etc.).
+class Instance {
+ public:
+  std::string name;
+  bool has_cluster{};
+  int cluster_id{};
+
+  // Optional scalar power from manifest "pwr" entries (W).
+  bool has_manual_power{};
+  double manual_power_W{};
+
+  // Optional OpenSTA report_power breakdown.
+  bool has_sta_power{};
+  InstPower sta_power;
 };
 
 // RTLMP root.fp.txt: one rect per line (name x y w h in DBU) — same as report.py
@@ -132,9 +154,8 @@ class Chip {
   Layout layout;
   Kit kit;
   Tech tech;
-  std::vector<PwrEntry> pwr;
-  /// Instance name -> RTLMP cluster id (many instances share one id). Map size = listed instances, not #groups.
-  std::unordered_map<std::string, int> groups;
+  /// Canonical instance table (key=name), carrying cluster and power attributes.
+  std::unordered_map<std::string, Instance> instances;
   /// Soft macro / cluster / macro rects from RTLMP floorplan text (µm)
   std::vector<FpBox> fp;
 };

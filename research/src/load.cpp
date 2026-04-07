@@ -196,6 +196,118 @@ std::string trim_str(std::string s) {
   return s.substr(a, b - a + 1);
 }
 
+std::vector<std::string> split_tsv_line(const std::string& line) {
+  std::vector<std::string> out;
+  out.reserve(8);
+  size_t p = 0;
+  while (true) {
+    size_t q = line.find('\t', p);
+    if (q == std::string::npos) {
+      out.push_back(line.substr(p));
+      break;
+    }
+    out.push_back(line.substr(p, q - p));
+    p = q + 1;
+  }
+  return out;
+}
+
+double parse_double_relaxed(const std::string& s, bool* ok = nullptr) {
+  std::string t = trim_str(s);
+  if (t.empty()) {
+    if (ok)
+      *ok = false;
+    return 0.0;
+  }
+  try {
+    size_t idx = 0;
+    double v = std::stod(t, &idx);
+    // allow trailing spaces only
+    while (idx < t.size() && std::isspace(static_cast<unsigned char>(t[idx])))
+      ++idx;
+    if (idx != t.size()) {
+      if (ok)
+        *ok = false;
+      return 0.0;
+    }
+    if (ok)
+      *ok = true;
+    return v;
+  } catch (...) {
+    if (ok)
+      *ok = false;
+    return 0.0;
+  }
+}
+
+std::unordered_map<std::string, InstPower> parse_report_power_instances_tsv(
+    const std::filesystem::path& path) {
+  std::ifstream in(path);
+  if (!in)
+    throw std::runtime_error("cannot read: " + path.string());
+
+  std::string header;
+  if (!std::getline(in, header))
+    return {};
+  auto cols = split_tsv_line(trim_str(header));
+  std::unordered_map<std::string, size_t> idx;
+  for (size_t i = 0; i < cols.size(); ++i)
+    idx[cols[i]] = i;
+
+  auto col = [&](const char* name) -> int {
+    auto it = idx.find(name);
+    return it == idx.end() ? -1 : static_cast<int>(it->second);
+  };
+
+  const int c_inst = col("instance");
+  const int c_int = col("internal_W");
+  const int c_sw = col("switching_W");
+  const int c_lk = col("leakage_W");
+  const int c_tot = col("total_W");
+  const int c_cur = col("current_A");
+
+  if (c_inst < 0 || c_int < 0 || c_sw < 0 || c_lk < 0 || c_tot < 0) {
+    throw std::runtime_error(
+        "report_power_instances.tsv missing required columns (need instance, internal_W, switching_W, leakage_W, total_W): "
+        + path.string());
+  }
+
+  std::unordered_map<std::string, InstPower> out;
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.empty())
+      continue;
+    auto f = split_tsv_line(line);
+    if (static_cast<int>(f.size()) <= c_inst)
+      continue;
+    std::string inst = f[static_cast<size_t>(c_inst)];
+    if (inst.empty())
+      continue;
+
+    auto get = [&](int c) -> std::string {
+      if (c < 0)
+        return {};
+      size_t cs = static_cast<size_t>(c);
+      if (cs >= f.size())
+        return {};
+      return f[cs];
+    };
+
+    InstPower p;
+    p.internal_W = parse_double_relaxed(get(c_int));
+    p.switching_W = parse_double_relaxed(get(c_sw));
+    p.leakage_W = parse_double_relaxed(get(c_lk));
+    p.total_W = parse_double_relaxed(get(c_tot));
+    if (c_cur >= 0) {
+      bool ok = false;
+      p.current_A = parse_double_relaxed(get(c_cur), &ok);
+      p.has_current = ok;
+    }
+    out.emplace(std::move(inst), p);
+  }
+  return out;
+}
+
 bool sep_line(const std::string& line) {
   if (line.size() < 20)
     return false;
@@ -368,12 +480,52 @@ Chip load_chip(const std::filesystem::path& manifest_path) {
   chip.tech.tracks = parse_tracks_tcl(read_all(tracks_tcl));
   parse_pdn_tcl(read_all(pdn_tcl), chip.tech);
 
+  auto ensure_instance = [&](const std::string& name) -> Instance& {
+    auto it = chip.instances.find(name);
+    if (it == chip.instances.end()) {
+      Instance inst;
+      inst.name = name;
+      it = chip.instances.emplace(name, std::move(inst)).first;
+    }
+    return it->second;
+  };
+
   if (j.contains("pwr") && j["pwr"].is_array()) {
     for (const auto& e : j["pwr"]) {
-      PwrEntry pe;
-      pe.inst = e.at("inst").get<std::string>();
-      pe.w = e.at("w").get<double>();
-      chip.pwr.push_back(std::move(pe));
+      const std::string inst_name = e.at("inst").get<std::string>();
+      const double w = e.at("w").get<double>();
+      Instance& inst = ensure_instance(inst_name);
+      inst.has_manual_power = true;
+      inst.manual_power_W = w;
+    }
+  }
+
+  // Optional: load OpenSTA per-instance power dump (TSV) produced by report_power.tcl.
+  // Supported keys (relative to repo root):
+  //   - report_power_instances_tsv
+  //   - report_power_tsv
+  //   - power_tsv
+  {
+    std::string key;
+    if (j.contains("report_power_instances_tsv") && !j["report_power_instances_tsv"].is_null())
+      key = "report_power_instances_tsv";
+    else if (j.contains("report_power_tsv") && !j["report_power_tsv"].is_null())
+      key = "report_power_tsv";
+    else if (j.contains("power_tsv") && !j["power_tsv"].is_null())
+      key = "power_tsv";
+
+    if (!key.empty()) {
+      std::string rel = j[key].get<std::string>();
+      if (!rel.empty()) {
+        std::filesystem::path pp = resolve(rel);
+        expect_file(pp, key.c_str());
+        auto sta_map = parse_report_power_instances_tsv(pp);
+        for (auto& kv : sta_map) {
+          Instance& inst = ensure_instance(kv.first);
+          inst.has_sta_power = true;
+          inst.sta_power = kv.second;
+        }
+      }
     }
   }
 
@@ -382,7 +534,12 @@ Chip load_chip(const std::filesystem::path& manifest_path) {
     if (!gpath.empty()) {
       std::filesystem::path gp = resolve(gpath);
       expect_file(gp, "groups");
-      chip.groups = load_groups_file(gp);
+      auto groups = load_groups_file(gp);
+      for (const auto& kv : groups) {
+        Instance& inst = ensure_instance(kv.first);
+        inst.has_cluster = true;
+        inst.cluster_id = kv.second;
+      }
     }
   }
 

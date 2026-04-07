@@ -104,16 +104,46 @@ int main(int argc, char** argv) {
       std::cout << "\n";
     }
 
-    std::cout << "[pwr] " << c.pwr.size() << " manual power entries in manifest\n";
-
+    size_t manual_power_cnt = 0;
+    size_t sta_power_cnt = 0;
+    size_t cluster_cnt = 0;
     std::unordered_set<int> distinct_clusters;
-    for (const auto& kv : c.groups)
-      distinct_clusters.insert(kv.second);
-    std::cout << "[rtlmp] membership file: " << c.groups.size()
+    for (const auto& kv : c.instances) {
+      const auto& inst = kv.second;
+      if (inst.has_manual_power)
+        ++manual_power_cnt;
+      if (inst.has_sta_power)
+        ++sta_power_cnt;
+      if (inst.has_cluster) {
+        ++cluster_cnt;
+        distinct_clusters.insert(inst.cluster_id);
+      }
+    }
+    std::cout << "[inst] " << c.instances.size() << " total instances in unified table\n";
+    std::cout << "[pwr] " << manual_power_cnt << " manual power entries in manifest\n";
+    std::cout << "[pwr] " << sta_power_cnt
+              << " per-instance rows loaded from report_power_instances.tsv\n";
+
+    std::cout << "[rtlmp] membership file: " << cluster_cnt
               << " instances carry a cluster id; " << distinct_clusters.size()
               << " distinct ids (RTLMP leaf groups).\n";
     std::cout << "[rtlmp] root.fp.txt: " << c.fp.size()
               << " named rectangles (clusters/macros/etc., um).\n";
+
+    if (cluster_cnt != 0 && sta_power_cnt != 0) {
+      size_t joined = 0;
+      for (const auto& kv : c.instances) {
+        const auto& inst = kv.second;
+        if (inst.has_cluster && inst.has_sta_power)
+          ++joined;
+      }
+      std::cout << "[join] power∩cluster: " << joined << " instances"
+                << " (power coverage by cluster map: "
+                << (100.0 * static_cast<double>(joined) / static_cast<double>(sta_power_cnt))
+                << "%, cluster coverage by power map: "
+                << (100.0 * static_cast<double>(joined) / static_cast<double>(cluster_cnt))
+                << "%)\n";
+    }
 
     return 0;
   } catch (const std::exception& e) {
