@@ -308,41 +308,156 @@ std::unordered_map<std::string, InstPower> parse_report_power_instances_tsv(
   return out;
 }
 
+struct InstGeom {
+  bool has_is_macro{};
+  bool is_macro{};
+  bool has_area{};
+  double area_um2{};
+  bool has_loc{};
+  double cx_um{};
+  double cy_um{};
+  bool has_pg_pin{};
+  double pg_pin_x_um{};
+  double pg_pin_y_um{};
+};
+
+std::unordered_map<std::string, InstGeom> parse_instance_geom_tsv(
+    const std::filesystem::path& path) {
+  std::ifstream in(path);
+  if (!in)
+    throw std::runtime_error("cannot read: " + path.string());
+
+  std::string header;
+  if (!std::getline(in, header))
+    return {};
+  auto cols = split_tsv_line(trim_str(header));
+  std::unordered_map<std::string, size_t> idx;
+  for (size_t i = 0; i < cols.size(); ++i)
+    idx[cols[i]] = i;
+
+  auto col = [&](const char* name) -> int {
+    auto it = idx.find(name);
+    return it == idx.end() ? -1 : static_cast<int>(it->second);
+  };
+  const int c_inst = col("instance");
+  const int c_is_macro = col("is_macro");
+  const int c_area = col("area_um2");
+  const int c_cx = col("cx_um");
+  const int c_cy = col("cy_um");
+  const int c_pgx = col("pg_pin_x_um");
+  const int c_pgy = col("pg_pin_y_um");
+  if (c_inst < 0) {
+    throw std::runtime_error("instance_geom_tsv missing required column: instance");
+  }
+
+  std::unordered_map<std::string, InstGeom> out;
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.empty())
+      continue;
+    auto f = split_tsv_line(line);
+    if (static_cast<int>(f.size()) <= c_inst)
+      continue;
+    const std::string inst = f[static_cast<size_t>(c_inst)];
+    if (inst.empty())
+      continue;
+
+    auto get = [&](int c) -> std::string {
+      if (c < 0)
+        return {};
+      size_t cs = static_cast<size_t>(c);
+      if (cs >= f.size())
+        return {};
+      return f[cs];
+    };
+
+    InstGeom g;
+    if (c_is_macro >= 0) {
+      const std::string v = get(c_is_macro);
+      if (!v.empty()) {
+        g.has_is_macro = true;
+        g.is_macro = (v == "1" || v == "true" || v == "TRUE" || v == "True");
+      }
+    }
+    bool ok = false;
+    g.area_um2 = parse_double_relaxed(get(c_area), &ok);
+    g.has_area = ok && g.area_um2 > 0.0;
+    g.cx_um = parse_double_relaxed(get(c_cx), &ok);
+    g.has_loc = ok;
+    bool ok_y = false;
+    g.cy_um = parse_double_relaxed(get(c_cy), &ok_y);
+    g.has_loc = g.has_loc && ok_y;
+
+    bool okx = false;
+    bool oky = false;
+    g.pg_pin_x_um = parse_double_relaxed(get(c_pgx), &okx);
+    g.pg_pin_y_um = parse_double_relaxed(get(c_pgy), &oky);
+    g.has_pg_pin = okx && oky;
+    out.emplace(inst, g);
+  }
+  return out;
+}
+
 bool sep_line(const std::string& line) {
   if (line.size() < 20)
     return false;
   return line.find_first_not_of('-') == std::string::npos;
 }
 
-std::unordered_map<std::string, int> parse_simple_groups(std::istream& in) {
-  std::unordered_map<std::string, int> m;
+struct GroupInfo {
+  int id{};
+  std::string name;
+};
+
+std::unordered_map<std::string, GroupInfo> parse_simple_groups(std::istream& in) {
+  std::unordered_map<std::string, GroupInfo> m;
   std::string line;
   while (std::getline(in, line)) {
     line = trim_str(std::move(line));
     if (line.empty() || line[0] == '#')
       continue;
-    std::istringstream ls(line);
-    std::string inst;
+    auto toks = split_ws(line);
+    if (toks.size() < 2)
+      continue;
+    std::string inst = toks[0];
     int id{};
-    if (ls >> inst >> id)
-      m[inst] = id;
+    try {
+      id = std::stoi(toks[1]);
+    } catch (...) {
+      continue;
+    }
+    std::string gname = "cluster_" + std::to_string(id);
+    if (toks.size() > 2) {
+      // rtlmp_instance_to_cluster.txt: inst id cluster_name depth
+      gname.clear();
+      for (size_t i = 2; i + 1 < toks.size(); ++i) {
+        if (!gname.empty())
+          gname += " ";
+        gname += toks[i];
+      }
+      if (gname.empty())
+        gname = "cluster_" + std::to_string(id);
+    }
+    m[inst] = GroupInfo{id, std::move(gname)};
   }
   return m;
 }
 
 // flow/designs/.../rtlmp_extract.tcl dump: GROUP / DIRECT_INSTS / indented inst names
-std::unordered_map<std::string, int> parse_rtlmp_membership(std::istream& in) {
+std::unordered_map<std::string, GroupInfo> parse_rtlmp_membership(std::istream& in) {
   std::unordered_map<std::string, int> group_name_to_id;
-  std::unordered_map<std::string, int> inst_to_id;
+  std::unordered_map<std::string, GroupInfo> inst_to_group;
   int next_id = 0;
   int cur_id = -1;
+  std::string cur_name;
   bool in_insts = false;
   std::string line;
   while (std::getline(in, line)) {
     std::string t = trim_str(line);
     if (t.rfind("GROUP:", 0) == 0) {
       in_insts = false;
-      std::string gname = trim_str(t.substr(6));
+      cur_name = trim_str(t.substr(6));
+      std::string gname = cur_name;
       auto it = group_name_to_id.find(gname);
       if (it == group_name_to_id.end()) {
         cur_id = next_id++;
@@ -362,13 +477,13 @@ std::unordered_map<std::string, int> parse_rtlmp_membership(std::istream& in) {
     if (in_insts && cur_id >= 0 && line.size() >= 2 && line[0] == ' ' && line[1] == ' ') {
       std::string inst = trim_str(line);
       if (!inst.empty())
-        inst_to_id[inst] = cur_id;
+        inst_to_group[inst] = GroupInfo{cur_id, cur_name};
     }
   }
-  return inst_to_id;
+  return inst_to_group;
 }
 
-std::unordered_map<std::string, int> load_groups_file(const std::filesystem::path& path) {
+std::unordered_map<std::string, GroupInfo> load_groups_file(const std::filesystem::path& path) {
   std::string all = read_all(path);
   if (all.find("RTLMP cluster hierarchy") != std::string::npos) {
     std::istringstream ss(all);
@@ -529,6 +644,51 @@ Chip load_chip(const std::filesystem::path& manifest_path) {
     }
   }
 
+  // Optional: geometry extracted from OpenROAD/ODB.
+  // Expected TSV columns:
+  //   instance (required),
+  //   area_um2, cx_um, cy_um, pg_pin_x_um, pg_pin_y_um (optional).
+  // Supported keys:
+  //   - instance_geom_tsv
+  //   - instance_geometry_tsv
+  {
+    std::string key;
+    if (j.contains("instance_geom_tsv") && !j["instance_geom_tsv"].is_null())
+      key = "instance_geom_tsv";
+    else if (j.contains("instance_geometry_tsv") && !j["instance_geometry_tsv"].is_null())
+      key = "instance_geometry_tsv";
+
+    if (!key.empty()) {
+      std::string rel = j[key].get<std::string>();
+      if (!rel.empty()) {
+        std::filesystem::path gp = resolve(rel);
+        expect_file(gp, key.c_str());
+        auto geom = parse_instance_geom_tsv(gp);
+        for (const auto& kv : geom) {
+          Instance& inst = ensure_instance(kv.first);
+          const auto& g = kv.second;
+          if (g.has_is_macro) {
+            inst.is_macro = g.is_macro;
+          }
+          if (g.has_area) {
+            inst.has_area = true;
+            inst.area_um2 = g.area_um2;
+          }
+          if (g.has_loc) {
+            inst.has_loc = true;
+            inst.cx_um = g.cx_um;
+            inst.cy_um = g.cy_um;
+          }
+          if (g.has_pg_pin) {
+            inst.has_pg_pin = true;
+            inst.pg_pin_x_um = g.pg_pin_x_um;
+            inst.pg_pin_y_um = g.pg_pin_y_um;
+          }
+        }
+      }
+    }
+  }
+
   if (j.contains("groups") && !j["groups"].is_null()) {
     std::string gpath = j["groups"].get<std::string>();
     if (!gpath.empty()) {
@@ -538,7 +698,8 @@ Chip load_chip(const std::filesystem::path& manifest_path) {
       for (const auto& kv : groups) {
         Instance& inst = ensure_instance(kv.first);
         inst.has_cluster = true;
-        inst.cluster_id = kv.second;
+        inst.cluster_id = kv.second.id;
+        inst.cluster_name = kv.second.name;
       }
     }
   }

@@ -15,7 +15,21 @@ import matplotlib.patches as patches
 RULE = "-" * 80
 
 
-def parse_membership(path: Path):
+def _flow_dir() -> Path:
+    """This script lives in flow/designs/<platform>/<design>/placepng.py → parent⁴ == flow/."""
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+DEFAULT_MEMBERSHIP = (
+    _flow_dir() / "reports/nangate45/mempool_group/base/rtlmp_instance_to_cluster.txt"
+)
+
+
+def fail(msg: str):
+    raise RuntimeError(msg)
+
+
+def parse_cluster_membership_hierarchy(path: Path):
     groups = []
     current = None
     reading_insts = False
@@ -79,6 +93,67 @@ def parse_membership(path: Path):
             inst_to_group[inst] = group["group_name"]
 
     return leaf_groups, inst_to_group, duplicate_insts
+
+
+def parse_instance_to_cluster_txt(path: Path):
+    """
+    Parse reports/.../rtlmp_instance_to_cluster.txt from rtlmp_extract.tcl:
+    # instance cluster_id cluster_name depth
+    <inst_name> <gid> <gname...> <depth>
+    """
+    inst_to_group = {}
+    duplicate_insts = set()
+    with path.open("r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            try:
+                int(parts[-1])  # depth
+                int(parts[1])  # cluster_id
+            except ValueError:
+                continue
+            inst = parts[0]
+            gname = " ".join(parts[2:-1])
+            if not gname:
+                continue
+            if inst in inst_to_group and inst_to_group[inst] != gname:
+                duplicate_insts.add(inst)
+            inst_to_group[inst] = gname
+
+    unique_names = sorted(set(inst_to_group.values()))
+    leaf_groups = [
+        {
+            "group_name": name,
+            "parent": "",
+            "type": "",
+            "depth": 0,
+            "child_group_count": 0,
+            "direct_insts": [],
+        }
+        for name in unique_names
+    ]
+    return leaf_groups, inst_to_group, duplicate_insts
+
+
+def load_membership(path: Path):
+    """
+    Accept either rtlmp_instance_to_cluster.txt (flat) or rtlmp_cluster_membership.txt
+    (hierarchy dump). Detection matches research load_groups_file().
+    """
+    head = ""
+    with path.open("r", encoding="utf-8") as f:
+        for _ in range(64):
+            line = f.readline()
+            if not line:
+                break
+            head += line
+    if "RTLMP cluster hierarchy" in head:
+        return parse_cluster_membership_hierarchy(path)
+    return parse_instance_to_cluster_txt(path)
 
 
 def parse_plan_csv(path: Path):
@@ -232,6 +307,42 @@ def color_map(group_names):
     return {name: cmap(idx) for idx, name in enumerate(group_names)}
 
 
+def validate_inputs(
+    odb_path: Path,
+    membership_path: Path,
+    plan_csv: Path | None,
+    openroad_bin: Path,
+):
+    if not odb_path.exists():
+        fail(f"--odb not found: {odb_path}")
+    if not membership_path.exists():
+        fail(f"--membership not found: {membership_path}")
+    if plan_csv is not None and not plan_csv.exists():
+        fail(f"--plan-csv not found: {plan_csv}")
+    if not openroad_bin.exists():
+        fail(f"--openroad not found: {openroad_bin}")
+
+
+def analyze_consistency(grouped_rows, plan, matched: int, unmatched: int):
+    grouped_names = set(grouped_rows.keys())
+    plan_names = set(plan.keys())
+    overlap = grouped_names & plan_names
+    plan_only = plan_names - grouped_names
+    grouped_only = grouped_names - plan_names
+    total_cells = matched + unmatched
+    unmatched_ratio = (unmatched / total_cells) if total_cells else 0.0
+
+    return {
+        "grouped_names": grouped_names,
+        "plan_names": plan_names,
+        "overlap": overlap,
+        "plan_only": plan_only,
+        "grouped_only": grouped_only,
+        "total_cells": total_cells,
+        "unmatched_ratio": unmatched_ratio,
+    }
+
+
 def draw_core(ax, core):
     ax.add_patch(
         patches.Rectangle(
@@ -328,13 +439,31 @@ def render_individual(out_dir: Path, core, grouped_rows, plan, colors):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--odb", required=True)
-    ap.add_argument("--membership", required=True)
+    ap.add_argument(
+        "--membership",
+        default=str(DEFAULT_MEMBERSHIP),
+        help=(
+            "rtlmp_instance_to_cluster.txt (default: flow/reports/.../base/) "
+            "or rtlmp_cluster_membership.txt hierarchy dump"
+        ),
+    )
     ap.add_argument("--out", required=True)
     ap.add_argument("--out-dir")
     ap.add_argument("--plan-csv")
     ap.add_argument(
         "--openroad",
         default="/home/piohuang/OpenROAD-flow-scripts/tools/install/OpenROAD/bin/openroad",
+    )
+    ap.add_argument(
+        "--max-unmatched-ratio",
+        type=float,
+        default=0.95,
+        help="Fail if unmatched_placed_cells / total_placed_cells exceeds this value.",
+    )
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="Treat major consistency warnings as hard errors.",
     )
     args = ap.parse_args()
 
@@ -349,9 +478,17 @@ def main():
     plan_csv = Path(args.plan_csv).resolve() if args.plan_csv else None
     openroad_bin = Path(args.openroad).resolve()
 
-    leaf_groups, inst_to_group, duplicate_insts = parse_membership(membership_path)
+    validate_inputs(odb_path, membership_path, plan_csv, openroad_bin)
+    leaf_groups, inst_to_group, duplicate_insts = load_membership(membership_path)
+    if not leaf_groups:
+        fail(
+            "No cluster groups in membership input "
+            "(empty rtlmp_instance_to_cluster.txt or no leaf groups in hierarchy dump)."
+        )
     plan = parse_plan_csv(plan_csv) if plan_csv else {}
     core, placed_rows = extract_placed_rows(openroad_bin, odb_path)
+    if not placed_rows:
+        fail("No placed standard cells were extracted from ODB.")
 
     grouped_rows = {group["group_name"]: [] for group in leaf_groups}
     unmatched = 0
@@ -363,19 +500,46 @@ def main():
         grouped_rows.setdefault(group_name, []).append(row)
 
     grouped_rows = {name: rows for name, rows in grouped_rows.items() if rows}
+    if not grouped_rows:
+        fail("No placed cells matched membership groups. Inputs are likely inconsistent.")
     colors = color_map(sorted(grouped_rows))
+
+    matched = sum(len(rows) for rows in grouped_rows.values())
+    stats = analyze_consistency(grouped_rows, plan, matched, unmatched)
+    if stats["unmatched_ratio"] > args.max_unmatched_ratio:
+        fail(
+            "Too many unmatched placed cells. "
+            f"ratio={stats['unmatched_ratio']:.3f} "
+            f"(threshold={args.max_unmatched_ratio:.3f}). "
+            "Use matching ODB and membership files from the same run."
+        )
+    if plan and not stats["overlap"]:
+        fail(
+            "Plan CSV has zero name overlap with matched groups. "
+            "Use plan/membership from the same RTLMP run."
+        )
+    if args.strict and plan and stats["grouped_only"]:
+        fail(
+            "Some matched groups are missing in plan CSV under --strict. "
+            f"missing={len(stats['grouped_only'])}"
+        )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     render_overview(out_path, core, grouped_rows, plan, colors)
     render_individual(out_dir, core, grouped_rows, plan, colors)
 
-    matched = sum(len(rows) for rows in grouped_rows.values())
     print(f"overview_png={out_path}")
     print(f"per_cluster_dir={out_dir}")
     print(f"leaf_groups={len(grouped_rows)}")
     print(f"matched_cells={matched}")
     print(f"unmatched_placed_cells={unmatched}")
     print(f"duplicate_membership_insts={len(duplicate_insts)}")
+    print(f"unmatched_ratio={stats['unmatched_ratio']:.6f}")
+    if plan:
+        print(f"plan_cluster_count={len(stats['plan_names'])}")
+        print(f"plan_overlap_count={len(stats['overlap'])}")
+        print(f"plan_only_clusters={len(stats['plan_only'])}")
+        print(f"grouped_without_plan={len(stats['grouped_only'])}")
 
 
 if __name__ == "__main__":

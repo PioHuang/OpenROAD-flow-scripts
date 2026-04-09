@@ -1,7 +1,14 @@
 #include <phys/chip.hpp>
+#include <phys/pdn_ir.hpp>
 
 #include <filesystem>
+#include <cmath>
+#include <algorithm>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
 #include <unordered_set>
 
 int main(int argc, char** argv) {
@@ -143,6 +150,252 @@ int main(int argc, char** argv) {
                 << "%, cluster coverage by power map: "
                 << (100.0 * static_cast<double>(joined) / static_cast<double>(cluster_cnt))
                 << "%)\n";
+    }
+
+    size_t area_cnt = 0;
+    size_t loc_cnt = 0;
+    size_t pg_pin_cnt = 0;
+    for (const auto& kv : c.instances) {
+      const auto& inst = kv.second;
+      if (inst.has_area)
+        ++area_cnt;
+      if (inst.has_loc)
+        ++loc_cnt;
+      if (inst.has_pg_pin)
+        ++pg_pin_cnt;
+    }
+    std::cout << "[geom] instance area rows: " << area_cnt << ", location rows: " << loc_cnt
+              << ", pg-pin rows: " << pg_pin_cnt << "\n";
+
+    auto infer_vdd_from_power_rows = [&](const phys::Chip& chip) {
+      std::vector<double> ratios;
+      ratios.reserve(chip.instances.size());
+      for (const auto& kv : chip.instances) {
+        const auto& inst = kv.second;
+        if (!inst.has_sta_power)
+          continue;
+        if (!inst.sta_power.has_current)
+          continue;
+        if (inst.sta_power.current_A <= 1e-15 || inst.sta_power.total_W <= 1e-15)
+          continue;
+        ratios.push_back(inst.sta_power.total_W / inst.sta_power.current_A);
+      }
+      if (ratios.empty()) {
+        throw std::runtime_error(
+            "Cannot infer VDD from report_power_instances.tsv: no valid total_W/current_A rows.");
+      }
+      std::sort(ratios.begin(), ratios.end());
+      return ratios[ratios.size() / 2];
+    };
+
+    struct MeshIrFromOpenroad {
+      double pitch_x_um{};
+      double pitch_y_um{};
+      double w_h_um{};
+      double w_v_um{};
+      double r_sqh{};
+      double r_sqv{};
+      std::string layer_h;
+      std::string layer_v;
+      std::string source;
+    };
+
+    auto derive_mesh_ir_from_openroad = [&](const phys::Chip& chip) -> MeshIrFromOpenroad {
+      std::unordered_map<std::string, double> rc_r_per_um;
+      for (const auto& rc : chip.tech.rc) {
+        rc_r_per_um[rc.layer] = rc.r;
+      }
+
+      struct StripePick {
+        std::string layer;
+        double width{};
+        double pitch{};
+      };
+      std::vector<StripePick> picks;
+      for (const auto& s : chip.tech.stripes) {
+        // Prefer core grid straps (exclude followpins rail; exclude macro-only grids).
+        if (s.followpins)
+          continue;
+        if (!s.grid.empty() && s.grid != "grid")
+          continue;
+        if (s.width <= 0.0 || s.pitch <= 0.0)
+          continue;
+        picks.push_back({s.layer, s.width, s.pitch});
+      }
+      if (picks.empty()) {
+        throw std::runtime_error(
+            "No usable add_pdn_stripe entries found in pdn_tcl to derive mesh pitch/width.");
+      }
+
+      std::sort(picks.begin(),
+                picks.end(),
+                [](const StripePick& a, const StripePick& b) { return a.pitch < b.pitch; });
+      const StripePick v = picks[0];
+      const StripePick h = picks.size() >= 2 ? picks[1] : picks[0];
+
+      auto get_r = [&](const std::string& layer) {
+        auto it = rc_r_per_um.find(layer);
+        if (it == rc_r_per_um.end()) {
+          throw std::runtime_error("Missing set_layer_rc for layer " + layer
+                                   + " referenced by add_pdn_stripe.");
+        }
+        return it->second;
+      };
+
+      MeshIrFromOpenroad out;
+      out.pitch_x_um = h.pitch;
+      out.pitch_y_um = v.pitch;
+      out.w_h_um = h.width;
+      out.w_v_um = v.width;
+      out.layer_h = h.layer;
+      out.layer_v = v.layer;
+      // Convert R(ohm/um) to equivalent sheet resistance for requested formula.
+      out.r_sqh = get_r(h.layer) * h.width;
+      out.r_sqv = get_r(v.layer) * v.width;
+      out.source = "pdn_tcl(add_pdn_stripe) + setRC.tcl(set_layer_rc)";
+      return out;
+    };
+
+    auto infer_cell_area_fallback = [&](const phys::Chip& chip) {
+      std::vector<double> vals;
+      vals.reserve(chip.instances.size());
+      for (const auto& kv : chip.instances) {
+        const auto& inst = kv.second;
+        if (inst.has_area && inst.area_um2 > 0.0)
+          vals.push_back(inst.area_um2);
+      }
+      if (vals.empty())
+        throw std::runtime_error("No positive instance areas available to infer fallback cell area.");
+      std::sort(vals.begin(), vals.end());
+      return vals[vals.size() / 2];
+    };
+
+    auto infer_packing_util = [&](const phys::Chip& chip) {
+      double sum_area = 0.0;
+      for (const auto& kv : chip.instances) {
+        const auto& inst = kv.second;
+        if (inst.has_area && inst.area_um2 > 0.0)
+          sum_area += inst.area_um2;
+      }
+      const double core_w = chip.layout.core[2] - chip.layout.core[0];
+      const double core_h = chip.layout.core[3] - chip.layout.core[1];
+      const double core_area = core_w * core_h;
+      if (core_area <= 0.0)
+        throw std::runtime_error("Invalid core area in manifest.");
+      double util = sum_area / core_area;
+      if (util <= 0.0 || !std::isfinite(util))
+        throw std::runtime_error("Cannot infer packing utilization from instance areas.");
+      if (util > 1.0)
+        util = 1.0;
+      return util;
+    };
+
+    const double inferred_vdd = infer_vdd_from_power_rows(c);
+    const auto mesh_ir = derive_mesh_ir_from_openroad(c);
+    const double inferred_cell_area = infer_cell_area_fallback(c);
+    const double inferred_pack_util = infer_packing_util(c);
+
+    phys::IrModel ir(c);
+    ir.estOptions().vdd_V = inferred_vdd;
+    ir.estOptions().prefer_sta_current = true;
+    ir.estOptions().assumed_cell_area_um2 = inferred_cell_area;
+    ir.estOptions().packing_utilization = inferred_pack_util;
+    ir.setStrapSheet(
+        {mesh_ir.r_sqh, mesh_ir.r_sqv, mesh_ir.w_h_um, mesh_ir.w_v_um});
+
+    ir.buildUniformMesh(mesh_ir.pitch_x_um, mesh_ir.pitch_y_um);
+    ir.loadHardMacroCurrents();
+    ir.analyzeSoftModules();
+    ir.assignMeshLoads();
+    ir.solvePgMeshDc(ir.estOptions().vdd_V);
+
+    const phys::UniformMesh& mesh = ir.mesh();
+    const auto& hard = ir.hardMacros();
+    const phys::SoftIrData& soft_data = ir.softData();
+
+    std::cout << "[ir] uniform mesh nodes: " << mesh.nodes.size() << " (" << mesh.nx << "x"
+              << mesh.ny << "), pitch=(" << mesh.pitch_x_um << "," << mesh.pitch_y_um
+              << ") um\n";
+    const phys::StrapSheetModel& strap = ir.strapSheet();
+    std::cout << "[ir] model r_sqh=" << strap.r_sqh << " r_sqv=" << strap.r_sqv
+              << " w_hstrap=" << strap.w_hstrap_um << " w_vstrap=" << strap.w_vstrap_um << " um\n";
+    std::cout << "[ir] layers h=" << mesh_ir.layer_h << " v=" << mesh_ir.layer_v
+              << " source=" << mesh_ir.source << "\n";
+    std::cout << "[ir] inferred VDD=" << ir.estOptions().vdd_V
+              << " V, median cell area=" << ir.estOptions().assumed_cell_area_um2
+              << " um^2, inferred packing util=" << ir.estOptions().packing_utilization << "\n";
+    {
+      double vmin = std::numeric_limits<double>::infinity();
+      double vmax = -std::numeric_limits<double>::infinity();
+      for (const auto& n : mesh.nodes) {
+        vmin = std::min(vmin, n.v_V);
+        vmax = std::max(vmax, n.v_V);
+      }
+      if (std::isfinite(vmin))
+        std::cout << "[pg] DC mesh solve Gx=i: V_min=" << vmin << " V  V_max=" << vmax
+                  << " V  drop_max=" << (ir.estOptions().vdd_V - vmin) << " V\n";
+    }
+
+    std::filesystem::path out_dir = manifest.parent_path() / "out";
+    std::filesystem::create_directories(out_dir);
+    const std::filesystem::path hard_tsv = out_dir / "ir_hard_macros.tsv";
+    const std::filesystem::path soft_tsv = out_dir / "ir_soft_modules.tsv";
+    const std::filesystem::path mesh_tsv = out_dir / "ir_mesh_nodes.tsv";
+
+    {
+      std::ofstream f(hard_tsv);
+      f << "instance\tfp_region\tpin_x_um\tpin_y_um\timax_A\tvpin_est_V\n";
+      for (const auto& h : hard) {
+        const double vj = ir.hardPinVoltage(h.pin_x_um, h.pin_y_um, h.current_A);
+        f << h.instance << '\t' << h.fp_region << '\t' << h.pin_x_um << '\t' << h.pin_y_um << '\t'
+          << h.current_A << '\t' << vj << '\n';
+      }
+    }
+
+    {
+      std::ofstream f(soft_tsv);
+      f << "cluster_id\tcluster_name\tinstance_count\ti_observed_A\ti_worst_box_A\ti_mesh_sum_A\t"
+           "vmin_tile_V\n";
+      for (const auto& s : soft_data.modules) {
+        const phys::FpBox* box = nullptr;
+        for (const auto& b : c.fp) {
+          if (b.name == s.cluster_name) {
+            box = &b;
+            break;
+          }
+        }
+        double vk = std::numeric_limits<double>::quiet_NaN();
+        auto kit = soft_data.knapsack_by_name.find(s.cluster_name);
+        if (box && kit != soft_data.knapsack_by_name.end())
+          vk = ir.softClusterWorstVoltage(*box, kit->second);
+        f << s.cluster_id << '\t' << s.cluster_name << '\t' << s.instance_count << '\t'
+          << s.observed_total_A << '\t' << s.worst_case_A << '\t' << s.i_mesh_sum_A << '\t' << vk
+          << '\n';
+      }
+    }
+
+    {
+      std::ofstream f(mesh_tsv);
+      f << "ix\tiy\tx_um\ty_um\ti_soft_A\ti_hard_A\ti_total_A\tv_V\n";
+      for (const auto& n : mesh.nodes) {
+        f << n.ix << '\t' << n.iy << '\t' << n.x_um << '\t' << n.y_um << '\t' << n.I_soft_A << '\t'
+          << n.I_hard_A << '\t' << (n.I_soft_A + n.I_hard_A) << '\t' << n.v_V << '\n';
+      }
+    }
+
+    std::cout << "[hard] count=" << hard.size() << "  output=" << hard_tsv << "\n";
+    std::cout << "[soft] count=" << soft_data.modules.size() << "  output=" << soft_tsv << "\n";
+    std::cout << "[mesh] nodes=" << mesh.nodes.size() << "  output=" << mesh_tsv << "\n";
+    if (!hard.empty()) {
+      const auto& h = hard.front();
+      const double vj = ir.hardPinVoltage(h.pin_x_um, h.pin_y_um, h.current_A);
+      std::cout << "[hard-top] Imax=" << h.current_A << " A  Vpin_est=" << vj << " V  "
+                << h.instance << "\n";
+    }
+    if (!soft_data.modules.empty()) {
+      const auto& s = soft_data.modules.front();
+      std::cout << "[soft-top] Iobs=" << s.observed_total_A << " A  Ibox~=" << s.worst_case_A
+                << " A  Imesh_sum=" << s.i_mesh_sum_A << " A  cid=" << s.cluster_id << "\n";
     }
 
     return 0;

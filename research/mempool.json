@@ -1,23 +1,36 @@
 {
   "name": "mempool_group",
   "layout": {
-    "die": [0, 0, 1100, 1100],
-    "core": [10, 12, 1090, 1090],
-    "halo": [10, 10],
+    "die": [
+      0,
+      0,
+      1100,
+      1100
+    ],
+    "core": [
+      10,
+      12,
+      1090,
+      1090
+    ],
+    "halo": [
+      10,
+      10
+    ],
     "odb": "",
     "def": ""
   },
   "kit": {
-    "tech_lef": "research/design/platforms/nangate45/lef/NangateOpenCellLibrary.tech.lef",
-    "sc_lef": "research/design/platforms/nangate45/lef/NangateOpenCellLibrary.macro.mod.lef",
+    "tech_lef": "flow/platforms/nangate45/lef/NangateOpenCellLibrary.tech.lef",
+    "sc_lef": "flow/platforms/nangate45/lef/NangateOpenCellLibrary.macro.mod.lef",
     "lef_extra": [
-      "research/design/platforms/nangate45/lef/fakeram45_256x32.lef",
-      "research/design/platforms/nangate45/lef/fakeram45_64x64.lef"
+      "flow/platforms/nangate45/lef/fakeram45_256x32.lef",
+      "flow/platforms/nangate45/lef/fakeram45_64x64.lef"
     ],
     "lib": [
-      "research/design/platforms/nangate45/lib/NangateOpenCellLibrary_typical.lib",
-      "research/design/platforms/nangate45/lib/fakeram45_256x32.lib",
-      "research/design/platforms/nangate45/lib/fakeram45_64x64.lib"
+      "flow/platforms/nangate45/lib/NangateOpenCellLibrary_typical.lib",
+      "flow/platforms/nangate45/lib/fakeram45_256x32.lib",
+      "flow/platforms/nangate45/lib/fakeram45_64x64.lib"
     ]
   },
   "tech": {
@@ -26,13 +39,14 @@
     "route_min": "metal2",
     "route_max": "metal10",
     "route_clk_min": "metal4",
-    "set_rc_tcl": "research/design/platforms/nangate45/tcl/setRC.tcl",
-    "tracks_tcl": "research/design/platforms/nangate45/tcl/make_tracks.tcl",
-    "pdn_tcl": "research/design/platforms/nangate45/tcl/grid_strategy-M1-M4-M7.tcl"
+    "set_rc_tcl": "flow/platforms/nangate45/setRC.tcl",
+    "tracks_tcl": "flow/platforms/nangate45/make_tracks.tcl",
+    "pdn_tcl": "flow/platforms/nangate45/grid_strategy-M1-M4-M7.tcl"
   },
   "pwr": [],
   "report_power_instances_tsv": "flow/reports/nangate45/mempool_group/base/report_power_instances.tsv",
+  "instance_geom_tsv": "flow/reports/nangate45/mempool_group/base/instance_geom.tsv",
   "groups": "flow/reports/nangate45/mempool_group/base/rtlmp_instance_to_cluster.txt",
   "fp_dbu_per_um": 2000,
-  "rtl_fp": "research/design/artifacts/nangate45/mempool_group/base/root.fp.txt"
+  "rtl_fp": "flow/objects/nangate45/mempool_group/base/rtlmp_extract/root.fp.txt"
 }

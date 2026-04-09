@@ -131,6 +131,16 @@ class Instance {
   std::string name;
   bool has_cluster{};
   int cluster_id{};
+  std::string cluster_name;
+  bool is_macro{};
+  bool has_area{};
+  double area_um2{};
+  bool has_loc{};
+  double cx_um{};
+  double cy_um{};
+  bool has_pg_pin{};
+  double pg_pin_x_um{};
+  double pg_pin_y_um{};
 
   // Optional scalar power from manifest "pwr" entries (W).
   bool has_manual_power{};

@@ -100,13 +100,31 @@ export GLOBAL_PLACEMENT_ARGS = -disable_pin_density_adjust
 # export DPO_MAX_DISPLACEMENT = 5
 
 # Nudge density / padding (defaults come from variables.mk; uncomment to override).
-export PLACE_DENSITY = 0.3
+# macro_place_util.tcl passes this (via place_density_with_lb_addon) as rtl_macro_placer -target_util
+# when PLACE_DENSITY_LB_ADDON is unset — keep in sync with rtlmp_extract.tcl -target_util.
+export PLACE_DENSITY = 0.4
 # export CELL_PAD_IN_SITES_GLOBAL_PLACEMENT = 0
 
-# --- RTLMP cluster sizing (macro_place_util.tcl → rtl_macro_placer); rerun floorplan after change ---
-# Fewer tiny soft clusters: raise min std cells per cluster (tune to your design).
-# export RTLMP_MIN_INST = 500
-# Optional: stronger parent-outline pressure (default 100 in variables.yaml).
-# export RTLMP_OUTLINE_WT = 150
-# Override all RTLMP args in one string (replaces individual RTLMP_* passthrough).
-# export RTLMP_ARGS = {-max_num_level 2 ... }
+# --- RTLMP / rtl_macro_placer: match flow/designs/nangate45/mempool_group/rtlmp_extract.tcl ---
+# Halos already match extract (-halo_width/-halo_height 10): MACRO_PLACE_HALO above.
+# RTLMP_RPT_DIR uses deferred '=' so $(OBJECTS_DIR) exists after scripts/variables.mk.
+export RTLMP_MAX_LEVEL = 1
+export RTLMP_MIN_AR = 0.33
+export RTLMP_AREA_WT = 0.1
+export RTLMP_WIRELENGTH_WT = 100
+export RTLMP_OUTLINE_WT = 100
+export RTLMP_BOUNDARY_WT = 50
+export RTLMP_NOTCH_WT = 50
+export RTLMP_FENCE_LX = 0.0
+export RTLMP_FENCE_LY = 0.0
+export RTLMP_FENCE_UX = 0.0
+export RTLMP_FENCE_UY = 0.0
+export RTLMP_RPT_DIR = $(OBJECTS_DIR)/rtlmp_extract
+export RTLMP_KEEP_CLUSTERING_DATA = 1
+# export RTLMP_MAX_INST =  # tune this
+export RTLMP_MIN_INST = 80000
+# During do-2_2_floorplan_macro: dump RTLMP soft-macro *.fp.txt / *.cost.txt / *.net.txt
+# under RTLMP_RPT_DIR (same idea as set_debug_level in rtlmp_extract.tcl legacy path).
+export RTLMP_DEBUG_FLOORPLAN = 1
+# Fewer tiny soft clusters (optional): export RTLMP_MIN_INST = 500
+# Override all RTLMP flags at once (replaces RTLMP_* passthrough + halos + -target_util): RTLMP_ARGS

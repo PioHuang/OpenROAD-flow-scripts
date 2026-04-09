@@ -52,6 +52,8 @@ if { [find_macros] != "" } {
   append_env_var additional_rtlmp_args RTLMP_OUTLINE_WT -outline_weight 1
   append_env_var additional_rtlmp_args RTLMP_BOUNDARY_WT -boundary_weight 1
   append_env_var additional_rtlmp_args RTLMP_NOTCH_WT -notch_weight 1
+  # Matches rtl_macro_placer -keep_clustering_data (set RTLMP_KEEP_CLUSTERING_DATA=1 in config.mk).
+  append_env_var additional_rtlmp_args RTLMP_KEEP_CLUSTERING_DATA -keep_clustering_data 0
   append_env_var additional_rtlmp_args RTLMP_RPT_DIR -report_directory 1
   append_env_var additional_rtlmp_args RTLMP_FENCE_LX -fence_lx 1
   append_env_var additional_rtlmp_args RTLMP_FENCE_LY -fence_ly 1
@@ -64,6 +66,12 @@ if { [find_macros] != "" } {
 
   if { [env_var_exists_and_non_empty RTLMP_ARGS] } {
     set all_args $::env(RTLMP_ARGS)
+  }
+
+  # When RTLMP_DEBUG_FLOORPLAN=1, HierRTLMP writes *.fp.txt, *.cost.txt, *.net.txt
+  # under -report_directory (RTLMP_RPT_DIR) for each cluster (see hier_rtlmp.cpp).
+  if { [env_var_equals RTLMP_DEBUG_FLOORPLAN 1] } {
+    set_debug_level MPL hierarchical_macro_placement 1
   }
 
   log_cmd rtl_macro_placer {*}$all_args

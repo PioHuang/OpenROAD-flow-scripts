@@ -14,6 +14,7 @@ FetchContent_MakeAvailable(json)
 
 add_executable(phys_load
   src/load.cpp
+  src/pdn_ir.cpp
   src/main.cpp
 )
 target_include_directories(phys_load PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -1348,6 +1348,14 @@ RTLMP_ARGS:
     Overrides all other RTL macro placer arguments.
   stages:
     - floorplan
+RTLMP_DEBUG_FLOORPLAN:
+  description: >
+    If 1, enables MPL debug level for hierarchical_macro_placement so rtl_macro_placer
+    writes soft-macro floorplan/cost/net dumps (*.fp.txt, *.cost.txt, *.net.txt) under
+    RTLMP_RPT_DIR (default $(OBJECTS_DIR)/rtlmp).
+  default: 0
+  stages:
+    - floorplan
 GDS_ALLOW_EMPTY:
   description: >
     Single regular expression of module names of macros that have no .gds file
