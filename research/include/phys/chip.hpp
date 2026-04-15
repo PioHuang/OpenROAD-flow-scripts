@@ -125,6 +125,13 @@ class InstPower {
   bool has_current{};
 };
 
+/// One POWER/GROUND attachment point on a block instance (from instance_geom.tsv / ODB).
+struct MacroPgPin {
+  std::string name;  ///< MTerm name (e.g. VDD); may be empty if column absent in TSV
+  double x_um{};
+  double y_um{};
+};
+
 /// Unified per-instance data assembled from multiple inputs (groups/power/etc.).
 class Instance {
  public:
@@ -138,9 +145,9 @@ class Instance {
   bool has_loc{};
   double cx_um{};
   double cy_um{};
-  bool has_pg_pin{};
-  double pg_pin_x_um{};
-  double pg_pin_y_um{};
+  /// Hard macros: often multiple POWER/GROUND iterms; mesh IR uses each pin (current split equally).
+  std::vector<MacroPgPin> pg_pins;
+  bool has_pg_pin{};  // true iff pg_pins non-empty (set when loading geometry)
 
   // Optional scalar power from manifest "pwr" entries (W).
   bool has_manual_power{};

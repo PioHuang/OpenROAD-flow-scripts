@@ -67,11 +67,12 @@ struct ModuleCurrent {
   double i_mesh_sum_A{};           // Σ_n Imax(A_ov(n,k), k) over mesh tiles (regional model)
 };
 
-/// One hard macro instance: its own current and ODB PG centroid (µm). fp_region is RTLMP box.name.
+/// One hard-macro PG pin: instance supply current is split equally across all pins (see hard_currents).
 struct HardMacroCurrent {
   std::string instance;
   std::string fp_region;
-  double current_A{};
+  std::string pg_pin_name;  ///< MTerm name when present in TSV
+  double current_A{};       ///< Share of instance current at this pin (A)
   double pin_x_um{};
   double pin_y_um{};
 };

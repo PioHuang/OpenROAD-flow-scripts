@@ -29,7 +29,7 @@ cluster_id	cluster_name	instance_count	i_observed_A	i_worst_box_A	i_mesh_sum_A	v
 74	i_axi_interco||i_east_interco||i_north_interco||i_northeast_interco	1375	0.000587193	0.000587193	0.019047	1.09918
 22	gen_tiles\[0\].i_tile/i_tile/gen_tcdm_registers\[3\].i_tcdm_slave_resp_register	233	0.000547042	0.000547042	0.00541567	1.09781
 26	gen_tiles\[0\].i_tile/i_tile/gen_tcdm_registers\[1\].i_tcdm_slave_resp_register	233	0.000495414	0.000495414	0.0050011	1.09689
-24	gen_tiles\[0\].i_tile/i_tile/gen_tcdm_registers\[2\].i_tcdm_slave_resp_register	233	0.000488911	0.000488911	0.00387488	1.09702
+24	gen_tiles\[0\].i_tile/i_tile/gen_tcdm_registers\[2\].i_tcdm_slave_resp_register	233	0.000488911	0.000488911	0.00387488	1.09701
 30	gen_tiles\[0\].i_tile/i_tile/gen_tcdm_registers\[0\].i_tcdm_slave_resp_register	213	0.000339058	0.000339058	0.00408926	1.09645
 19	gen_tiles\[0\].i_tile/i_tile/i_remote_req_interco||(gen_tiles\[0\].i_tile/i_tile)_glue_logic	1915	0.000272658	0.000272658	0.00132554	1.09482
 25	gen_tiles\[0\].i_tile/i_tile/gen_tcdm_registers\[2\].i_tcdm_master_req_register	324	0.000272093	0.000272093	0.00124273	1.0951
@@ -43,15 +43,15 @@ cluster_id	cluster_name	instance_count	i_observed_A	i_worst_box_A	i_mesh_sum_A	v
 69	gen_tiles\[0\].i_tile/i_tile/gen_banks\[0\].mem_bank	1	1.98182e-06	1.98182e-06	0	nan
 55	gen_tiles\[0\].i_tile/i_tile/gen_banks\[1\].mem_bank	1	1.97273e-06	1.97273e-06	9.27033e-13	1.09929
 53	gen_tiles\[0\].i_tile/i_tile/gen_banks\[2\].mem_bank	1	1.95455e-06	1.95455e-06	9.18489e-13	1.1
-41	gen_tiles\[0\].i_tile/i_tile/gen_banks\[8\].mem_bank	1	1.95455e-06	1.95455e-06	9.18489e-13	1.09946
+41	gen_tiles\[0\].i_tile/i_tile/gen_banks\[8\].mem_bank	1	1.95455e-06	1.95455e-06	9.18489e-13	1.09945
 49	gen_tiles\[0\].i_tile/i_tile/gen_banks\[4\].mem_bank	1	1.95455e-06	1.95455e-06	0	nan
-45	gen_tiles\[0\].i_tile/i_tile/gen_banks\[6\].mem_bank	1	1.91818e-06	1.91818e-06	9.01401e-13	1.09946
+45	gen_tiles\[0\].i_tile/i_tile/gen_banks\[6\].mem_bank	1	1.91818e-06	1.91818e-06	9.01401e-13	1.09945
 51	gen_tiles\[0\].i_tile/i_tile/gen_banks\[3\].mem_bank	1	1.91818e-06	1.91818e-06	9.01401e-13	1.09936
 63	gen_tiles\[0\].i_tile/i_tile/gen_banks\[12\].mem_bank	1	1.91818e-06	1.91818e-06	9.01401e-13	1.09951
 47	gen_tiles\[0\].i_tile/i_tile/gen_banks\[5\].mem_bank	1	1.91818e-06	1.91818e-06	9.01401e-13	1.09929
 67	gen_tiles\[0\].i_tile/i_tile/gen_banks\[10\].mem_bank	1	1.91818e-06	1.91818e-06	9.01401e-13	1.09954
 39	gen_tiles\[0\].i_tile/i_tile/gen_banks\[9\].mem_bank	1	1.91818e-06	1.91818e-06	9.01401e-13	1.0989
-61	gen_tiles\[0\].i_tile/i_tile/gen_banks\[13\].mem_bank	1	1.9e-06	1.9e-06	8.92857e-13	1.09946
+61	gen_tiles\[0\].i_tile/i_tile/gen_banks\[13\].mem_bank	1	1.9e-06	1.9e-06	8.92857e-13	1.09945
 65	gen_tiles\[0\].i_tile/i_tile/gen_banks\[11\].mem_bank	1	1.9e-06	1.9e-06	8.92857e-13	1.09894
 43	gen_tiles\[0\].i_tile/i_tile/gen_banks\[7\].mem_bank	1	1.9e-06	1.9e-06	8.92857e-13	1.09902
 59	gen_tiles\[0\].i_tile/i_tile/gen_banks\[14\].mem_bank	1	1.9e-06	1.9e-06	8.92857e-13	1.09969

@@ -275,19 +275,25 @@ std::vector<HardMacroCurrent> hard_currents(const Chip& chip, const EstOpts& opt
             "hard_currents: instance \"" + t
             + "\" not in Chip::instances (required for hard-macro PG pins).");
       }
-      if (!it->second.has_pg_pin) {
+      if (!it->second.has_pg_pin || it->second.pg_pins.empty()) {
         throw std::runtime_error(
             "hard_currents: hard macro \"" + t
             + "\" has no ODB PG geometry (instance_geom.tsv). LEF/ODB must expose POWER/GROUND pins.");
       }
       const auto& inst = it->second;
-      HardMacroCurrent h;
-      h.instance = t;
-      h.fp_region = box.name;
-      h.current_A = inst_I(inst, opt);
-      h.pin_x_um = inst.pg_pin_x_um;
-      h.pin_y_um = inst.pg_pin_y_um;
-      out.push_back(std::move(h));
+      const double I_tot = inst_I(inst, opt);
+      const double n_pin = static_cast<double>(inst.pg_pins.size());
+      const double I_each = I_tot / n_pin;
+      for (const auto& pin : inst.pg_pins) {
+        HardMacroCurrent h;
+        h.instance = t;
+        h.fp_region = box.name;
+        h.pg_pin_name = pin.name;
+        h.current_A = I_each;
+        h.pin_x_um = pin.x_um;
+        h.pin_y_um = pin.y_um;
+        out.push_back(std::move(h));
+      }
     }
   }
   std::sort(out.begin(), out.end(), [](const HardMacroCurrent& a, const HardMacroCurrent& b) {

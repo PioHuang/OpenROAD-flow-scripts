@@ -316,10 +316,27 @@ struct InstGeom {
   bool has_loc{};
   double cx_um{};
   double cy_um{};
-  bool has_pg_pin{};
-  double pg_pin_x_um{};
-  double pg_pin_y_um{};
+  std::vector<MacroPgPin> pg_pins;
+  bool has_pg_pin{};  // !pg_pins.empty()
 };
+
+static void merge_inst_geom(InstGeom& a, const InstGeom& b) {
+  if (b.has_is_macro) {
+    a.has_is_macro = true;
+    a.is_macro = b.is_macro;
+  }
+  if (b.has_area) {
+    a.has_area = true;
+    a.area_um2 = b.area_um2;
+  }
+  if (b.has_loc) {
+    a.has_loc = true;
+    a.cx_um = b.cx_um;
+    a.cy_um = b.cy_um;
+  }
+  a.pg_pins.insert(a.pg_pins.end(), b.pg_pins.begin(), b.pg_pins.end());
+  a.has_pg_pin = !a.pg_pins.empty();
+}
 
 std::unordered_map<std::string, InstGeom> parse_instance_geom_tsv(
     const std::filesystem::path& path) {
@@ -344,6 +361,7 @@ std::unordered_map<std::string, InstGeom> parse_instance_geom_tsv(
   const int c_area = col("area_um2");
   const int c_cx = col("cx_um");
   const int c_cy = col("cy_um");
+  const int c_pgn = col("pg_pin_name");
   const int c_pgx = col("pg_pin_x_um");
   const int c_pgy = col("pg_pin_y_um");
   if (c_inst < 0) {
@@ -390,10 +408,23 @@ std::unordered_map<std::string, InstGeom> parse_instance_geom_tsv(
 
     bool okx = false;
     bool oky = false;
-    g.pg_pin_x_um = parse_double_relaxed(get(c_pgx), &okx);
-    g.pg_pin_y_um = parse_double_relaxed(get(c_pgy), &oky);
-    g.has_pg_pin = okx && oky;
-    out.emplace(inst, g);
+    const double px = parse_double_relaxed(get(c_pgx), &okx);
+    const double py = parse_double_relaxed(get(c_pgy), &oky);
+    if (okx && oky) {
+      MacroPgPin pin;
+      pin.name = (c_pgn >= 0) ? trim_str(get(c_pgn)) : std::string{};
+      pin.x_um = px;
+      pin.y_um = py;
+      g.pg_pins.push_back(std::move(pin));
+    }
+    g.has_pg_pin = !g.pg_pins.empty();
+
+    auto it = out.find(inst);
+    if (it == out.end()) {
+      out.emplace(inst, std::move(g));
+    } else {
+      merge_inst_geom(it->second, g);
+    }
   }
   return out;
 }
@@ -647,7 +678,8 @@ Chip load_chip(const std::filesystem::path& manifest_path) {
   // Optional: geometry extracted from OpenROAD/ODB.
   // Expected TSV columns:
   //   instance (required),
-  //   area_um2, cx_um, cy_um, pg_pin_x_um, pg_pin_y_um (optional).
+  //   area_um2, cx_um, cy_um, pg_pin_name (optional), pg_pin_x_um, pg_pin_y_um (optional).
+  //   Multiple rows with the same instance append PG pins (macros with several POWER/GROUND iterms).
   // Supported keys:
   //   - instance_geom_tsv
   //   - instance_geometry_tsv
@@ -679,11 +711,8 @@ Chip load_chip(const std::filesystem::path& manifest_path) {
             inst.cx_um = g.cx_um;
             inst.cy_um = g.cy_um;
           }
-          if (g.has_pg_pin) {
-            inst.has_pg_pin = true;
-            inst.pg_pin_x_um = g.pg_pin_x_um;
-            inst.pg_pin_y_um = g.pg_pin_y_um;
-          }
+          inst.pg_pins = g.pg_pins;
+          inst.has_pg_pin = g.has_pg_pin;
         }
       }
     }

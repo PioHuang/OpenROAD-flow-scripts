@@ -8,6 +8,8 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
+#include <set>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -154,18 +156,17 @@ int main(int argc, char** argv) {
 
     size_t area_cnt = 0;
     size_t loc_cnt = 0;
-    size_t pg_pin_cnt = 0;
+    size_t pg_pin_point_cnt = 0;
     for (const auto& kv : c.instances) {
       const auto& inst = kv.second;
       if (inst.has_area)
         ++area_cnt;
       if (inst.has_loc)
         ++loc_cnt;
-      if (inst.has_pg_pin)
-        ++pg_pin_cnt;
+      pg_pin_point_cnt += inst.pg_pins.size();
     }
     std::cout << "[geom] instance area rows: " << area_cnt << ", location rows: " << loc_cnt
-              << ", pg-pin rows: " << pg_pin_cnt << "\n";
+              << ", pg pin points: " << pg_pin_point_cnt << "\n";
 
     auto infer_vdd_from_power_rows = [&](const phys::Chip& chip) {
       std::vector<double> ratios;
@@ -344,11 +345,11 @@ int main(int argc, char** argv) {
 
     {
       std::ofstream f(hard_tsv);
-      f << "instance\tfp_region\tpin_x_um\tpin_y_um\timax_A\tvpin_est_V\n";
+      f << "instance\tfp_region\tpg_pin_name\tpin_x_um\tpin_y_um\timax_A\tvpin_est_V\n";
       for (const auto& h : hard) {
         const double vj = ir.hardPinVoltage(h.pin_x_um, h.pin_y_um, h.current_A);
-        f << h.instance << '\t' << h.fp_region << '\t' << h.pin_x_um << '\t' << h.pin_y_um << '\t'
-          << h.current_A << '\t' << vj << '\n';
+        f << h.instance << '\t' << h.fp_region << '\t' << h.pg_pin_name << '\t' << h.pin_x_um << '\t'
+          << h.pin_y_um << '\t' << h.current_A << '\t' << vj << '\n';
       }
     }
 
@@ -383,14 +384,63 @@ int main(int argc, char** argv) {
       }
     }
 
-    std::cout << "[hard] count=" << hard.size() << "  output=" << hard_tsv << "\n";
+    std::cout << "[hard] pin_rows=" << hard.size() << "  output=" << hard_tsv << "\n";
+
+    std::map<std::string, std::vector<const phys::HardMacroCurrent*>> pins_by_instance;
+    for (const auto& h : hard)
+      pins_by_instance[h.instance].push_back(&h);
+
+    std::map<std::string, int> fp_region_ix;
+    {
+      std::set<std::string> reg_keys;
+      for (const auto& h : hard)
+        reg_keys.insert(h.fp_region);
+      int r = 0;
+      for (const auto& s : reg_keys)
+        fp_region_ix.emplace(s, r++);
+    }
+
+    auto macro_index = [&](const std::string& inst) -> int {
+      int i = 0;
+      for (const auto& kv : pins_by_instance) {
+        if (kv.first == inst)
+          return i;
+        ++i;
+      }
+      return -1;
+    };
+
+    if (!pins_by_instance.empty()) {
+      std::cout << "[hard-macro] " << pins_by_instance.size()
+                << " hard macro instance(s); macro index = sorted instance name, fp_region = sorted "
+                   "unique RTLMP box string:\n";
+      std::cout << std::fixed << std::setprecision(3);
+      int midx = 0;
+      for (const auto& kv : pins_by_instance) {
+        const auto& plist = kv.second;
+        const int rix = fp_region_ix.at(plist.front()->fp_region);
+        std::cout << "      [" << midx << "] n_pins=" << plist.size() << "  fp_region=[" << rix
+                  << "]\n";
+        for (const phys::HardMacroCurrent* p : plist) {
+          const std::string& nm = p->pg_pin_name;
+          std::cout << "        " << (nm.empty() ? "(unnamed)" : nm) << "  (" << p->pin_x_um << ", "
+                    << p->pin_y_um << ") um\n";
+        }
+        ++midx;
+      }
+      std::cout << std::defaultfloat << std::setprecision(6);
+    }
+
     std::cout << "[soft] count=" << soft_data.modules.size() << "  output=" << soft_tsv << "\n";
     std::cout << "[mesh] nodes=" << mesh.nodes.size() << "  output=" << mesh_tsv << "\n";
     if (!hard.empty()) {
       const auto& h = hard.front();
       const double vj = ir.hardPinVoltage(h.pin_x_um, h.pin_y_um, h.current_A);
-      std::cout << "[hard-top] Imax=" << h.current_A << " A  Vpin_est=" << vj << " V  "
-                << h.instance << "\n";
+      const int hi = macro_index(h.instance);
+      const int ri = fp_region_ix.at(h.fp_region);
+      std::cout << "[hard-top] macro=[" << hi << "] fp_region=[" << ri << "] Imax_share=" << h.current_A
+                << " A  Vpin_est=" << vj << " V  pin="
+                << (h.pg_pin_name.empty() ? "?" : h.pg_pin_name) << "\n";
     }
     if (!soft_data.modules.empty()) {
       const auto& s = soft_data.modules.front();

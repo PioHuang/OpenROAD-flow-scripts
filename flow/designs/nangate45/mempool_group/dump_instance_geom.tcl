@@ -8,7 +8,7 @@ set tech [ord::get_db_tech]
 set dbu [$tech getDbUnitsPerMicron]
 
 set f [open $out_tsv w]
-puts $f "instance\tis_macro\tarea_um2\tcx_um\tcy_um\tpg_pin_x_um\tpg_pin_y_um"
+puts $f "instance\tis_macro\tarea_um2\tcx_um\tcy_um\tpg_pin_name\tpg_pin_x_um\tpg_pin_y_um"
 
 foreach inst [$block getInsts] {
   set name [$inst getName]
@@ -26,13 +26,10 @@ foreach inst [$block getInsts] {
     set cy [expr {([$box yMin] + [$box yMax]) / (2.0 * $dbu)}]
   }
 
-  # Average POWER/GROUND ITerm locations for hard macros only.
-  set pgx ""
-  set pgy ""
+  # One TSV row per POWER/GROUND ITerm on macros (multiple physical PG hooks).
+  # Standard cells: single row with empty pg_pin_* columns.
   if {$is_macro} {
-    set pg_sum_x 0.0
-    set pg_sum_y 0.0
-    set pg_n 0
+    set wrote_pin 0
     foreach iterm [$inst getITerms] {
       set mterm [$iterm getMTerm]
       set sig [$mterm getSigType]
@@ -43,17 +40,18 @@ foreach inst [$block getInsts] {
       if {!$ok} {
         continue
       }
-      set pg_sum_x [expr {$pg_sum_x + $x}]
-      set pg_sum_y [expr {$pg_sum_y + $y}]
-      incr pg_n
+      set pin_name [$mterm getName]
+      set pgx [expr {$x / $dbu}]
+      set pgy [expr {$y / $dbu}]
+      puts $f "$name\t$is_macro\t$area_um2\t$cx\t$cy\t$pin_name\t$pgx\t$pgy"
+      incr wrote_pin
     }
-    if {$pg_n > 0} {
-      set pgx [expr {($pg_sum_x / $pg_n) / $dbu}]
-      set pgy [expr {($pg_sum_y / $pg_n) / $dbu}]
+    if {$wrote_pin == 0} {
+      puts $f "$name\t$is_macro\t$area_um2\t$cx\t$cy\t\t\t"
     }
+  } else {
+    puts $f "$name\t$is_macro\t$area_um2\t$cx\t$cy\t\t\t"
   }
-
-  puts $f "$name\t$is_macro\t$area_um2\t$cx\t$cy\t$pgx\t$pgy"
 }
 
 close $f
