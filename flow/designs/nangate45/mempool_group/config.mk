@@ -70,6 +70,7 @@ export VERILOG_INCLUDE_DIRS = $(DESIGN_HOME)/src/$(DESIGN_NICKNAME)/rtl \
 	$(DESIGN_HOME)/src/$(DESIGN_NICKNAME)/rtl/register_interface/include
 
 export SDC_FILE      = $(DESIGN_HOME)/$(PLATFORM)/$(DESIGN_NICKNAME)/$(DESIGN_NAME).sdc
+export PDN_TCL       = $(DESIGN_HOME)/$(PLATFORM)/$(DESIGN_NICKNAME)/pdn.tcl
 
 export ADDITIONAL_LEFS = $(PLATFORM_DIR)/lef/fakeram45_256x32.lef \
                          $(PLATFORM_DIR)/lef/fakeram45_64x64.lef
@@ -95,7 +96,7 @@ export GPL_TIMING_DRIVEN = 0
 export GLOBAL_PLACEMENT_ARGS = -disable_pin_density_adjust
 
 # Skip improve_placement after detailed_placement (reduces post-GPL drift, esp. small islands).
-# export ENABLE_DPO = 0
+export ENABLE_DPO = 0
 # If ENABLE_DPO = 1, cap motion in microns:
 # export DPO_MAX_DISPLACEMENT = 5
 
@@ -128,3 +129,8 @@ export RTLMP_MIN_INST = 80000
 export RTLMP_DEBUG_FLOORPLAN = 1
 # Fewer tiny soft clusters (optional): export RTLMP_MIN_INST = 500
 # Override all RTLMP flags at once (replaces RTLMP_* passthrough + halos + -target_util): RTLMP_ARGS
+
+# After `2_4_floorplan_pdn`: write `export_psm_vsrc.tcl` outputs under REPORTS_DIR (psm_vsrc_<NET>.loc) for phys_load.
+export EXPORT_PSM_VSRC = 1
+# After `2_4_floorplan_pdn`: write real PDN via sites under REPORTS_DIR (pdn_vias_<NET>.tsv) for phys_load.
+export EXPORT_PDN_VIAS = 1

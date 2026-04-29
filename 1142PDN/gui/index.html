@@ -1,0 +1,1087 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>1142PDN Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f6f8fc;
+      --panel: #ffffff;
+      --panel-border: #dbe3f0;
+      --text: #0f172a;
+      --muted: #4b5563;
+      --accent: #2563eb;
+      --accent2: #0f9f61;
+      --shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Manrope", sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #f8fbff, #f3f5fa 70%);
+    }
+    .wrap {
+      max-width: 1880px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .hero p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      max-width: 880px;
+      line-height: 1.5;
+    }
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #eef3fb;
+      border: 1px solid var(--panel-border);
+      color: #334155;
+      font-size: 12px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+      margin-bottom: 14px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .toolbar label {
+      color: #334155;
+      font-size: 13px;
+    }
+    input[type="text"] {
+      width: 280px;
+      padding: 8px 10px;
+      color: var(--text);
+      background: #ffffff;
+      border: 1px solid #c8d3e6;
+      border-radius: 10px;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-weight: 600;
+      color: #ffffff;
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      cursor: pointer;
+    }
+    .status {
+      color: var(--accent2);
+      font-size: 13px;
+      min-width: 220px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(520px, 1fr));
+      gap: 14px;
+    }
+    .viz-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .viz-title h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+    .viz-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .canvas-wrap {
+      display: grid;
+      grid-template-columns: 1fr 72px;
+      gap: 12px;
+      align-items: stretch;
+    }
+    canvas.main {
+      width: 100%;
+      height: auto;
+      background: #ffffff;
+      border: 1px solid #d4ddeb;
+      border-radius: 12px;
+    }
+    canvas.legend {
+      width: 72px;
+      height: auto;
+      background: #ffffff;
+      border: 1px solid #d4ddeb;
+      border-radius: 12px;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .stat {
+      padding: 12px;
+      border-radius: 12px;
+      background: #f8fbff;
+      border: 1px solid #dbe6f4;
+    }
+    .stat .k {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .stat .v {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    #meta {
+      white-space: pre-wrap;
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.5;
+      max-height: 260px;
+      overflow: auto;
+    }
+    .toggle-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 8px 0 4px;
+    }
+    .toggle-strip label {
+      padding: 5px 9px;
+      border-radius: 999px;
+      border: 1px solid #cfdbed;
+      background: #f7faff;
+      font-size: 12px;
+      color: #334155;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .view-presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 0 0 8px;
+    }
+    .view-presets button {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #cfdbed;
+      background: #ffffff;
+      color: #1e293b;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .views3d {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(520px, 1fr));
+      gap: 14px;
+    }
+    .view3d {
+      width: 100%;
+      height: 560px;
+      border: 1px solid #d4ddeb;
+      border-radius: 12px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    .view3d canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    @media (max-width: 1280px) {
+      .grid { grid-template-columns: 1fr; }
+      .meta-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .views3d { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <h1>1142PDN Voltage and Load Viewer</h1>
+        <p>
+          VoltSpot-style virtual-grid visualization for OpenROAD floorplan-stage IR analysis.
+          The panels below show IR-drop hotspot map, computed current-load density, and the
+          virtual-grid graph used by the solver.
+        </p>
+      </div>
+      <div class="chips">
+        <div class="chip">IR hotspot map</div>
+        <div class="chip">Current-load map</div>
+        <div class="chip">Virtual-grid graph</div>
+        <div class="chip">Soft + hard overlays</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <label>Dump directory <input id="dir" type="text" value="/1142PDN/out/latest"></label>
+        <label>Physical PDN TSV <input id="physPath" type="text" value="/research/out/pdn_tcl_physical.tsv"></label>
+        <button id="load">Load</button>
+        <label><input id="edges" type="checkbox" checked> draw graph edges</label>
+        <label><input id="labels" type="checkbox" checked> draw soft labels</label>
+        <span id="status" class="status"></span>
+      </div>
+      <div class="toggle-strip">
+        <label><input id="irShowSources" type="checkbox" checked> IR: sources</label>
+        <label><input id="irShowPads" type="checkbox" checked> IR: pads</label>
+        <label><input id="irShowCoreRing" type="checkbox" checked> IR: core ring</label>
+        <label><input id="irShowHardMacro" type="checkbox" checked> IR: hard macro boxes</label>
+        <label><input id="irShowHardPins" type="checkbox" checked> IR: hard macro P/G pins</label>
+        <label><input id="irShowSoft" type="checkbox" checked> IR: soft modules</label>
+        <label><input id="irShowNodeGrid" type="checkbox"> IR: node grid lines</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="meta-grid" id="stats"></div>
+      <div id="meta"></div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <div class="viz-title">
+          <h3>IR Hotspot Map</h3>
+          <span>Color encodes voltage drop in %Vdd</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="heat" class="main" width="980" height="720"></canvas>
+          <canvas id="heatLegend" class="legend" width="72" height="720"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="viz-title">
+          <h3>Current-Load Map</h3>
+          <span>Color encodes computed current demand per virtual-grid node</span>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="current" class="main" width="980" height="720"></canvas>
+          <canvas id="currentLegend" class="legend" width="72" height="720"></canvas>
+        </div>
+      </div>
+
+      <div class="panel" style="grid-column: 1 / -1;">
+        <div class="viz-title">
+          <h3>Virtual Grid Graph</h3>
+          <span>White nodes are grid nodes, yellow nodes are directly sourced</span>
+        </div>
+        <canvas id="graph" class="main" width="1600" height="780"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="viz-title">
+        <h3>3D Physical / Abstract Views</h3>
+        <span>Drag to orbit, scroll to zoom, right-drag to pan</span>
+      </div>
+      <div class="toggle-strip" id="layerToggles"></div>
+      <div class="toggle-strip">
+        <label><input id="showSources3d" type="checkbox" checked> sources</label>
+        <label><input id="showPads3d" type="checkbox" checked> pads</label>
+        <label><input id="showCoreRing3d" type="checkbox" checked> core ring</label>
+        <label><input id="showHardMacro3d" type="checkbox" checked> hard macro boxes</label>
+        <label><input id="showHardPins3d" type="checkbox" checked> hard macro P/G pins</label>
+        <label><input id="showSoft3d" type="checkbox" checked> soft modules</label>
+        <label><input id="showAbsNodes3d" type="checkbox" checked> abstract nodes</label>
+        <label><input id="showAbsEdges3d" type="checkbox" checked> abstract edges</label>
+      </div>
+      <div class="views3d">
+        <div>
+          <div class="viz-title">
+            <h3>Physical PDN Layers</h3>
+            <span>From `pdn_tcl_physical.tsv` straps</span>
+          </div>
+          <div class="view-presets">
+            <button type="button" data-view-target="phys3d" data-view="top">Top</button>
+            <button type="button" data-view-target="phys3d" data-view="sidex">Side X</button>
+            <button type="button" data-view-target="phys3d" data-view="sidey">Side Y</button>
+            <button type="button" data-view-target="phys3d" data-view="iso">Iso</button>
+          </div>
+          <div class="view3d"><canvas id="phys3d"></canvas></div>
+        </div>
+        <div>
+          <div class="viz-title">
+            <h3>Abstracted PDN Model</h3>
+            <span>Virtual grid with IR-drop height coding</span>
+          </div>
+          <div class="view-presets">
+            <button type="button" data-view-target="abs3d" data-view="top">Top</button>
+            <button type="button" data-view-target="abs3d" data-view="sidex">Side X</button>
+            <button type="button" data-view-target="abs3d" data-view="sidey">Side Y</button>
+            <button type="button" data-view-target="abs3d" data-view="iso">Iso</button>
+          </div>
+          <div class="view3d"><canvas id="abs3d"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+import * as THREE from "https://esm.sh/three@0.160.0";
+import { OrbitControls } from "https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+function parseTsv(text) {
+  const lines = text.split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith("#"));
+  if (lines.length < 2) return [];
+  const hdr = lines[0].split("\t");
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split("\t");
+    const row = {};
+    for (let j = 0; j < hdr.length; j++) row[hdr[j]] = cols[j] ?? "";
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function loadTsv(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`fetch failed: ${path}`);
+  return parseTsv(await r.text());
+}
+
+function num(v, d = 0) {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : d;
+}
+
+function metaMap(metaRows) {
+  const m = {};
+  for (const row of metaRows) m[row.key] = row.value;
+  return m;
+}
+
+function xf(meta, w, h, pad = 30) {
+  const llx = num(meta.core_llx_um), lly = num(meta.core_lly_um);
+  const urx = num(meta.core_urx_um), ury = num(meta.core_ury_um);
+  const sx = (w - 2 * pad) / Math.max(1e-9, urx - llx);
+  const sy = (h - 2 * pad) / Math.max(1e-9, ury - lly);
+  return {
+    x: v => pad + (v - llx) * sx,
+    y: v => h - pad - (v - lly) * sy
+  };
+}
+
+function color(t) {
+  t = Math.max(0, Math.min(1, t));
+  const r = Math.floor(255 * t);
+  const g = Math.floor(180 * (1 - Math.abs(t - 0.5) * 2));
+  const b = Math.floor(255 * (1 - t));
+  return `rgb(${r},${g},${b})`;
+}
+
+function colorCurrent(t) {
+  t = Math.max(0, Math.min(1, t));
+  const r = Math.floor(255 * t);
+  const g = Math.floor(90 + 120 * t);
+  const b = Math.floor(40 * (1 - t));
+  return `rgb(${r},${g},${b})`;
+}
+
+function drawLegend(canvas, minVal, maxVal, title, mode) {
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const x = 18;
+  const y = 28;
+  const w = 20;
+  const h = canvas.height - 58;
+  for (let i = 0; i < h; i++) {
+    const t = 1 - i / Math.max(1, h - 1);
+    ctx.fillStyle = mode === "current" ? colorCurrent(t) : color(t);
+    ctx.fillRect(x, y + i, w, 1);
+  }
+  ctx.strokeStyle = "rgba(51,65,85,0.45)";
+  ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = "#334155";
+  ctx.font = "12px Manrope";
+  ctx.save();
+  ctx.translate(56, canvas.height * 0.5);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(title, 0, 0);
+  ctx.restore();
+  ctx.fillText(maxVal.toExponential ? maxVal.toExponential(3) : String(maxVal), 6, 18);
+  ctx.fillText(minVal.toExponential ? minVal.toExponential(3) : String(minVal), 6, canvas.height - 10);
+  for (let k = 0; k <= 4; k++) {
+    const yy = y + (h * k) / 4;
+    const vv = maxVal + (minVal - maxVal) * (k / 4);
+    ctx.strokeStyle = "rgba(51,65,85,0.28)";
+    ctx.beginPath();
+    ctx.moveTo(x + w + 4, yy);
+    ctx.lineTo(x + w + 10, yy);
+    ctx.stroke();
+    ctx.fillText(vv.toPrecision(4), x + w + 14, yy + 4);
+  }
+}
+
+function drawBaseOverlays(ctx, tr, hard, hardmacro, soft, sourceNodes, opts = {}) {
+  const showSources = opts.showSources ?? true;
+  const showPads = opts.showPads ?? true;
+  const showCoreRing = opts.showCoreRing ?? true;
+  const showHardMacro = opts.showHardMacro ?? true;
+  const showHardPins = opts.showHardPins ?? true;
+  const showSoft = opts.showSoft ?? true;
+  const padContacts = opts.padContacts ?? [];
+  const coreRing = opts.coreRing ?? [];
+
+  if (showCoreRing) {
+    ctx.strokeStyle = "rgba(14,116,144,0.95)";
+    ctx.lineWidth = 1.8;
+    for (const r of coreRing) {
+      const x0 = tr.x(num(r.llx)), y0 = tr.y(num(r.lly));
+      const x1 = tr.x(num(r.urx)), y1 = tr.y(num(r.ury));
+      ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+    }
+  }
+
+  if (showSources) {
+    ctx.strokeStyle = "rgba(245,158,11,0.95)";
+    ctx.fillStyle = "rgba(245,158,11,0.95)";
+    ctx.lineWidth = 1.4;
+    for (const s of sourceNodes) {
+      const x = tr.x(num(s.x_um));
+      const y = tr.y(num(s.y_um));
+      ctx.beginPath();
+      ctx.arc(x, y, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (showPads) {
+    ctx.strokeStyle = "rgba(234,88,12,0.95)";
+    ctx.lineWidth = 1.6;
+    for (const p of padContacts) {
+      const x = tr.x(num(p.x_um));
+      const y = tr.y(num(p.y_um));
+      ctx.beginPath();
+      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  if (showSoft) {
+    ctx.strokeStyle = "rgba(8,145,178,0.95)";
+    ctx.lineWidth = 1.2;
+    for (const s of soft) {
+      const x0 = tr.x(num(s.llx_um)), y0 = tr.y(num(s.lly_um));
+      const x1 = tr.x(num(s.urx_um)), y1 = tr.y(num(s.ury_um));
+      const rx = Math.min(x0, x1), ry = Math.min(y0, y1), rw = Math.abs(x1 - x0), rh = Math.abs(y1 - y0);
+      ctx.strokeRect(rx, ry, rw, rh);
+      if (document.getElementById("labels").checked) {
+        ctx.fillStyle = "rgba(8,145,178,0.95)";
+        ctx.font = "11px Manrope";
+        ctx.fillText(s.name, rx + 4, ry + 12);
+      }
+    }
+  }
+
+  if (showHardMacro) {
+    ctx.strokeStyle = "rgba(109,40,217,0.95)";
+    ctx.lineWidth = 1.3;
+    for (const m of hardmacro) {
+      const x0 = tr.x(num(m.llx_um)), y0 = tr.y(num(m.lly_um));
+      const x1 = tr.x(num(m.urx_um)), y1 = tr.y(num(m.ury_um));
+      const rx = Math.min(x0, x1), ry = Math.min(y0, y1), rw = Math.abs(x1 - x0), rh = Math.abs(y1 - y0);
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.fillStyle = "rgba(109,40,217,0.95)";
+      ctx.font = "11px Manrope";
+      ctx.fillText(m.name, rx + 4, ry + 12);
+    }
+  }
+
+  if (showHardPins) {
+    ctx.strokeStyle = "rgba(236,72,153,0.95)";
+    ctx.lineWidth = 1.5;
+    for (const h of hard) {
+      const x = tr.x(num(h.x_um)), y = tr.y(num(h.y_um));
+      ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 4, y + 4); ctx.lineTo(x + 4, y - 4); ctx.stroke();
+    }
+  }
+}
+
+function nodeRect(nodes, rows, cols, row, col, tr) {
+  const n = nodes[row * cols + col];
+  const x = tr.x(num(n.x_um));
+  const y = tr.y(num(n.y_um));
+  let x2 = x + 4, y2 = y + 4;
+  if (col + 1 < cols) x2 = tr.x(num(nodes[row * cols + (col + 1)].x_um));
+  if (row + 1 < rows) y2 = tr.y(num(nodes[(row + 1) * cols + col].y_um));
+  return [Math.min(x, x2), Math.min(y, y2), Math.abs(x2 - x) + 2, Math.abs(y2 - y) + 2];
+}
+
+function drawHeat(nodes, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, metaRows) {
+  const canvas = document.getElementById("heat");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const meta = metaMap(metaRows);
+  const tr = xf(meta, canvas.width, canvas.height);
+  const drops = nodes.map(n => num(n.drop_pct));
+  const dmin = Math.min(...drops);
+  const dmax = Math.max(...drops);
+
+  const rows = num(meta.rows), cols = num(meta.cols);
+  const showNodeGrid = document.getElementById("irShowNodeGrid").checked;
+  for (const n of nodes) {
+    const row = num(n.row), col = num(n.col);
+    const [x0, y0, w, h] = nodeRect(nodes, rows, cols, row, col, tr);
+    const t = dmax > dmin ? (num(n.drop_pct) - dmin) / (dmax - dmin) : 0.5;
+    ctx.fillStyle = color(t);
+    ctx.fillRect(x0, y0, w, h);
+    if (showNodeGrid) {
+      ctx.strokeStyle = "rgba(51,65,85,0.15)";
+      ctx.lineWidth = 0.4;
+      ctx.strokeRect(x0, y0, w, h);
+    }
+  }
+  drawBaseOverlays(ctx, tr, hard, hardmacro, soft, sourceNodes, {
+    showSources: document.getElementById("irShowSources").checked,
+    showPads: document.getElementById("irShowPads").checked,
+    showCoreRing: document.getElementById("irShowCoreRing").checked,
+    showHardMacro: document.getElementById("irShowHardMacro").checked,
+    showHardPins: document.getElementById("irShowHardPins").checked,
+    showSoft: document.getElementById("irShowSoft").checked,
+    padContacts,
+    coreRing,
+  });
+  drawLegend(document.getElementById("heatLegend"), dmin, dmax, "IR drop (%Vdd)", "drop");
+}
+
+function drawCurrent(nodes, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, metaRows) {
+  const canvas = document.getElementById("current");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const meta = metaMap(metaRows);
+  const tr = xf(meta, canvas.width, canvas.height);
+  const vals = nodes.map(n => num(n.load_a));
+  const cmin = Math.min(...vals);
+  const cmax = Math.max(...vals);
+  const rows = num(meta.rows), cols = num(meta.cols);
+  for (const n of nodes) {
+    const row = num(n.row), col = num(n.col);
+    const [x0, y0, w, h] = nodeRect(nodes, rows, cols, row, col, tr);
+    const t = cmax > cmin ? (num(n.load_a) - cmin) / (cmax - cmin) : 0.0;
+    ctx.fillStyle = colorCurrent(t);
+    ctx.fillRect(x0, y0, w, h);
+  }
+  drawBaseOverlays(ctx, tr, hard, hardmacro, soft, sourceNodes, {
+    showSources: document.getElementById("irShowSources").checked,
+    showPads: document.getElementById("irShowPads").checked,
+    showCoreRing: document.getElementById("irShowCoreRing").checked,
+    showHardMacro: document.getElementById("irShowHardMacro").checked,
+    showHardPins: document.getElementById("irShowHardPins").checked,
+    showSoft: document.getElementById("irShowSoft").checked,
+    padContacts,
+    coreRing,
+  });
+  drawLegend(document.getElementById("currentLegend"), cmin, cmax, "Current load (A)", "current");
+}
+
+function drawGraph(nodes, edges, metaRows) {
+  const canvas = document.getElementById("graph");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const meta = metaMap(metaRows);
+  const tr = xf(meta, canvas.width, canvas.height);
+  const byId = new Map(nodes.map(n => [num(n.id), n]));
+  if (document.getElementById("edges").checked) {
+    ctx.strokeStyle = "rgba(37,99,235,0.22)";
+    const maxEdges = 60000;
+    for (let i = 0; i < edges.length && i < maxEdges; i++) {
+      const e = edges[i];
+      const a = byId.get(num(e.u));
+      const b = byId.get(num(e.v));
+      if (!a || !b) continue;
+      ctx.beginPath();
+      ctx.moveTo(tr.x(num(a.x_um)), tr.y(num(a.y_um)));
+      ctx.lineTo(tr.x(num(b.x_um)), tr.y(num(b.y_um)));
+      ctx.stroke();
+    }
+  }
+  for (const n of nodes) {
+    const x = tr.x(num(n.x_um)), y = tr.y(num(n.y_um));
+    ctx.fillStyle = num(n.src_g) > 0 ? "rgb(245,158,11)" : "rgba(30,41,59,0.85)";
+    ctx.beginPath();
+    ctx.arc(x, y, num(n.src_g) > 0 ? 2.3 : 1.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function renderStats(metaRows, nodes) {
+  const meta = metaMap(metaRows);
+  const stats = [
+    ["Design", meta.design ?? "-"],
+    ["Virtual Grid", `${meta.rows} x ${meta.cols}`],
+    ["Max Drop", `${(Math.max(...nodes.map(n => num(n.drop_pct)))).toFixed(4)} %Vdd`],
+    ["Max Load", `${(Math.max(...nodes.map(n => num(n.load_a)))).toExponential(3)} A`],
+    ["Iterations", meta.iters ?? "-"],
+    ["Residual", Number(meta.resid ?? 0).toExponential(3)],
+    ["Rx / Ry", `${Number(meta.rx_ohm).toExponential(3)} / ${Number(meta.ry_ohm).toExponential(3)} ohm`],
+    ["Grid Pitch", `${Number(meta.grid_pitch_um).toFixed(3)} um`],
+  ];
+  document.getElementById("stats").innerHTML = stats
+    .map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`)
+    .join("");
+}
+
+const sceneState = {
+  loaded: null,
+  physical: null,
+  abstract: null,
+};
+
+function hexFromName(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  const r = (Math.abs(h) & 0xff);
+  const g = (Math.abs(h >> 8) & 0xff);
+  const b = (Math.abs(h >> 16) & 0xff);
+  return (r << 16) | (g << 8) | b;
+}
+
+function to3d(meta, x, y) {
+  const llx = num(meta.core_llx_um), lly = num(meta.core_lly_um);
+  const urx = num(meta.core_urx_um), ury = num(meta.core_ury_um);
+  const cx = 0.5 * (llx + urx), cy = 0.5 * (lly + ury);
+  return { x: x - cx, z: y - cy };
+}
+
+function setup3D(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xffffff);
+  const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 100000);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const controls = new OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.enablePan = true;
+  controls.minDistance = 8;
+  controls.maxDistance = 30000;
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.65);
+  dir.position.set(0.6, 1.2, 0.8);
+  scene.add(dir);
+  const root = new THREE.Group();
+  scene.add(root);
+
+  return { canvas, scene, camera, renderer, controls, root };
+}
+
+function fit3DView(view, meta) {
+  const cw = Math.max(1, num(meta.core_urx_um) - num(meta.core_llx_um));
+  const ch = Math.max(1, num(meta.core_ury_um) - num(meta.core_lly_um));
+  const radius = 0.75 * Math.max(cw, ch);
+  view.camera.position.set(0.7 * radius, 0.95 * radius, 1.1 * radius);
+  view.controls.target.set(0, 0, 0);
+  view.controls.update();
+}
+
+function setPresetView(view, meta, preset) {
+  if (!view) return;
+  const cw = Math.max(1, num(meta.core_urx_um) - num(meta.core_llx_um));
+  const ch = Math.max(1, num(meta.core_ury_um) - num(meta.core_lly_um));
+  const span = Math.max(cw, ch);
+  const d = 1.35 * span;
+  const h = 1.05 * span;
+  let px = 0.0, py = h, pz = d;
+  if (preset === "top") {
+    px = 0.0; py = h; pz = 0.001;
+  } else if (preset === "sidex") {
+    px = d; py = 0.18 * span; pz = 0.0;
+  } else if (preset === "sidey") {
+    px = 0.0; py = 0.18 * span; pz = d;
+  } else {
+    px = 0.7 * d; py = 0.75 * h; pz = 0.9 * d;
+  }
+  view.camera.position.set(px, py, pz);
+  view.controls.target.set(0, 0, 0);
+  view.controls.update();
+}
+
+function clearGroup(group) {
+  while (group.children.length) group.remove(group.children[0]);
+}
+
+function buildLayerToggles(layers) {
+  const host = document.getElementById("layerToggles");
+  host.innerHTML = "";
+  for (const layer of layers) {
+    const id = `lay_${layer.name}`;
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="checkbox" id="${id}" checked> ${layer.name}`;
+    host.appendChild(label);
+    document.getElementById(id).addEventListener("change", render3D);
+  }
+}
+
+function renderPhysical3D(nodes, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, layers, pdnPhysical, metaRows) {
+  if (!sceneState.physical) sceneState.physical = setup3D("phys3d");
+  const view = sceneState.physical;
+  const meta = metaMap(metaRows);
+  clearGroup(view.root);
+  const layerRank = new Map(layers.map(l => [l.name, num(l.rank)]));
+  const sortedRanks = [...new Set(layers.map(l => num(l.rank)))].sort((a, b) => a - b);
+  const rankToY = new Map(sortedRanks.map((r, i) => [r, i * 14]));
+  const layerVisible = new Map(layers.map(l => [l.name, document.getElementById(`lay_${l.name}`)?.checked ?? true]));
+
+  const coreW = Math.max(1, num(meta.core_urx_um) - num(meta.core_llx_um));
+  const coreH = Math.max(1, num(meta.core_ury_um) - num(meta.core_lly_um));
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(coreW, coreH),
+    new THREE.MeshBasicMaterial({ color: 0x0b122a, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  view.root.add(floor);
+
+  for (const r of pdnPhysical) {
+    if (r.kind !== "strap" && r.kind !== "ring") continue;
+    if (r.kind === "ring" && !document.getElementById("showCoreRing3d").checked) continue;
+    const layer = r.layer_lo;
+    if (!layerVisible.get(layer)) continue;
+    const llx = num(r.llx), lly = num(r.lly), urx = num(r.urx), ury = num(r.ury);
+    const w = Math.max(0.25, Math.abs(urx - llx));
+    const h = Math.max(0.25, Math.abs(ury - lly));
+    const p = to3d(meta, 0.5 * (llx + urx), 0.5 * (lly + ury));
+    const rank = layerRank.get(layer) ?? 0;
+    const y = (rankToY.get(rank) ?? 0) + 0.3;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 0.6, h),
+      new THREE.MeshStandardMaterial({
+        color: hexFromName(layer),
+        transparent: true,
+        opacity: r.kind === "ring" ? 0.95 : 0.85,
+        metalness: 0.2,
+        roughness: 0.75
+      })
+    );
+    mesh.position.set(p.x, y, p.z);
+    view.root.add(mesh);
+  }
+
+  if (document.getElementById("showSources3d").checked) {
+    for (const s of sourceNodes) {
+      const p = to3d(meta, num(s.x_um), num(s.y_um));
+      const m = new THREE.Mesh(new THREE.SphereGeometry(2.2, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffe45b }));
+      m.position.set(p.x, 2.0, p.z);
+      view.root.add(m);
+    }
+  }
+  if (document.getElementById("showPads3d").checked) {
+    for (const s of padContacts) {
+      const p = to3d(meta, num(s.x_um), num(s.y_um));
+      const m = new THREE.Mesh(new THREE.SphereGeometry(2.8, 16, 16), new THREE.MeshStandardMaterial({ color: 0xea580c }));
+      m.position.set(p.x, 3.3, p.z);
+      view.root.add(m);
+    }
+  }
+  if (document.getElementById("showHardMacro3d").checked) {
+    for (const m of hardmacro) {
+      const llx = num(m.llx_um), lly = num(m.lly_um), urx = num(m.urx_um), ury = num(m.ury_um);
+      const w = Math.max(0.2, Math.abs(urx - llx));
+      const h = Math.max(0.2, Math.abs(ury - lly));
+      const p = to3d(meta, 0.5 * (llx + urx), 0.5 * (lly + ury));
+      const box = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 5.0, h)),
+        new THREE.LineBasicMaterial({ color: 0x8800dd })
+      );
+      box.position.set(p.x, 2.8, p.z);
+      view.root.add(box);
+    }
+  }
+  if (document.getElementById("showHardPins3d").checked) {
+    for (const h of hard) {
+      const p = to3d(meta, num(h.x_um), num(h.y_um));
+      const m = new THREE.Mesh(new THREE.SphereGeometry(1.7, 14, 14), new THREE.MeshStandardMaterial({ color: 0xff4df4 }));
+      m.position.set(p.x, 4.2, p.z);
+      view.root.add(m);
+    }
+  }
+  if (document.getElementById("showSoft3d").checked) {
+    for (const s of soft) {
+      const llx = num(s.llx_um), lly = num(s.lly_um), urx = num(s.urx_um), ury = num(s.ury_um);
+      const w = Math.max(0.2, Math.abs(urx - llx));
+      const h = Math.max(0.2, Math.abs(ury - lly));
+      const p = to3d(meta, 0.5 * (llx + urx), 0.5 * (lly + ury));
+      const box = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 3.0, h)),
+        new THREE.LineBasicMaterial({ color: 0x37ffd8 })
+      );
+      box.position.set(p.x, 1.6, p.z);
+      view.root.add(box);
+    }
+  }
+
+  fit3DView(view, meta);
+}
+
+function renderAbstract3D(nodes, edges, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, metaRows) {
+  if (!sceneState.abstract) sceneState.abstract = setup3D("abs3d");
+  const view = sceneState.abstract;
+  const meta = metaMap(metaRows);
+  clearGroup(view.root);
+  const drops = nodes.map(n => num(n.drop_pct));
+  const dmin = Math.min(...drops);
+  const dmax = Math.max(...drops);
+
+  const pts = [];
+  const colors = [];
+  for (const n of nodes) {
+    const p = to3d(meta, num(n.x_um), num(n.y_um));
+    const t = dmax > dmin ? (num(n.drop_pct) - dmin) / (dmax - dmin) : 0.0;
+    const y = 2.0 + 35.0 * t;
+    pts.push(p.x, y, p.z);
+    const c = new THREE.Color(color(t));
+    colors.push(c.r, c.g, c.b);
+  }
+  if (document.getElementById("showAbsNodes3d").checked) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    const m = new THREE.PointsMaterial({ size: 2.2, vertexColors: true });
+    view.root.add(new THREE.Points(g, m));
+  }
+
+  if (document.getElementById("showAbsEdges3d").checked) {
+    const byId = new Map(nodes.map(n => [num(n.id), n]));
+    const seg = [];
+    for (const e of edges) {
+      const a = byId.get(num(e.u));
+      const b = byId.get(num(e.v));
+      if (!a || !b) continue;
+      const pa = to3d(meta, num(a.x_um), num(a.y_um));
+      const pb = to3d(meta, num(b.x_um), num(b.y_um));
+      const ta = dmax > dmin ? (num(a.drop_pct) - dmin) / (dmax - dmin) : 0.0;
+      const tb = dmax > dmin ? (num(b.drop_pct) - dmin) / (dmax - dmin) : 0.0;
+      seg.push(pa.x, 2.0 + 35.0 * ta, pa.z, pb.x, 2.0 + 35.0 * tb, pb.z);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(seg, 3));
+    view.root.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x8aa2ff, transparent: true, opacity: 0.45 })));
+  }
+
+  if (document.getElementById("showSources3d").checked) {
+    for (const s of sourceNodes) {
+      const p = to3d(meta, num(s.x_um), num(s.y_um));
+      const m = new THREE.Mesh(new THREE.ConeGeometry(1.9, 5.5, 10), new THREE.MeshStandardMaterial({ color: 0xffe45b }));
+      m.position.set(p.x, 4.5, p.z);
+      view.root.add(m);
+    }
+  }
+  if (document.getElementById("showPads3d").checked) {
+    for (const s of padContacts) {
+      const p = to3d(meta, num(s.x_um), num(s.y_um));
+      const m = new THREE.Mesh(new THREE.ConeGeometry(2.2, 6.2, 12), new THREE.MeshStandardMaterial({ color: 0xea580c }));
+      m.position.set(p.x, 5.2, p.z);
+      view.root.add(m);
+    }
+  }
+  if (document.getElementById("showCoreRing3d").checked) {
+    for (const r of coreRing) {
+      const llx = num(r.llx), lly = num(r.lly), urx = num(r.urx), ury = num(r.ury);
+      const w = Math.max(0.2, Math.abs(urx - llx));
+      const h = Math.max(0.2, Math.abs(ury - lly));
+      const p = to3d(meta, 0.5 * (llx + urx), 0.5 * (lly + ury));
+      const box = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 1.8, h)),
+        new THREE.LineBasicMaterial({ color: 0x0e7490 })
+      );
+      box.position.set(p.x, 1.0, p.z);
+      view.root.add(box);
+    }
+  }
+  if (document.getElementById("showHardMacro3d").checked) {
+    for (const m of hardmacro) {
+      const llx = num(m.llx_um), lly = num(m.lly_um), urx = num(m.urx_um), ury = num(m.ury_um);
+      const w = Math.max(0.2, Math.abs(urx - llx));
+      const h = Math.max(0.2, Math.abs(ury - lly));
+      const p = to3d(meta, 0.5 * (llx + urx), 0.5 * (lly + ury));
+      const box = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 3.2, h)),
+        new THREE.LineBasicMaterial({ color: 0x8800dd })
+      );
+      box.position.set(p.x, 1.8, p.z);
+      view.root.add(box);
+    }
+  }
+  if (document.getElementById("showHardPins3d").checked) {
+    for (const h of hard) {
+      const p = to3d(meta, num(h.x_um), num(h.y_um));
+      const m = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 12), new THREE.MeshStandardMaterial({ color: 0xff4df4 }));
+      m.position.set(p.x, 3.0, p.z);
+      view.root.add(m);
+    }
+  }
+  if (document.getElementById("showSoft3d").checked) {
+    for (const s of soft) {
+      const llx = num(s.llx_um), lly = num(s.lly_um), urx = num(s.urx_um), ury = num(s.ury_um);
+      const w = Math.max(0.2, Math.abs(urx - llx));
+      const h = Math.max(0.2, Math.abs(ury - lly));
+      const p = to3d(meta, 0.5 * (llx + urx), 0.5 * (lly + ury));
+      const box = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 2.2, h)),
+        new THREE.LineBasicMaterial({ color: 0x2df4d9 })
+      );
+      box.position.set(p.x, 1.4, p.z);
+      view.root.add(box);
+    }
+  }
+
+  fit3DView(view, meta);
+}
+
+function render3D() {
+  if (!sceneState.loaded) return;
+  const { nodes, edges, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, layers, pdnPhysical, meta } = sceneState.loaded;
+  renderPhysical3D(nodes, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, layers, pdnPhysical, meta);
+  renderAbstract3D(nodes, edges, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, meta);
+}
+
+function rectIntersection(a, b) {
+  const llx = Math.max(num(a.llx_um, num(a.llx)), num(b.llx_um, num(b.llx)));
+  const lly = Math.max(num(a.lly_um, num(a.lly)), num(b.lly_um, num(b.lly)));
+  const urx = Math.min(num(a.urx_um, num(a.urx)), num(b.urx_um, num(b.urx)));
+  const ury = Math.min(num(a.ury_um, num(a.ury)), num(b.ury_um, num(b.ury)));
+  if (urx <= llx || ury <= lly) return null;
+  return { llx, lly, urx, ury };
+}
+
+function buildPadContacts(sources, coreRing) {
+  const out = [];
+  const seen = new Set();
+  for (const s of sources) {
+    for (const r of coreRing) {
+      const ov = rectIntersection(s, r);
+      if (!ov) continue;
+      const x = 0.5 * (ov.llx + ov.urx);
+      const y = 0.5 * (ov.lly + ov.ury);
+      const k = `${x.toFixed(3)},${y.toFixed(3)}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ x_um: x, y_um: y });
+    }
+  }
+  return out;
+}
+
+function animate3D() {
+  for (const key of ["physical", "abstract"]) {
+    const view = sceneState[key];
+    if (!view) continue;
+    const w = view.canvas.clientWidth || 1;
+    const h = view.canvas.clientHeight || 1;
+    if (view.canvas.width !== w || view.canvas.height !== h) {
+      view.renderer.setSize(w, h, false);
+      view.camera.aspect = w / h;
+      view.camera.updateProjectionMatrix();
+    }
+    view.controls.update();
+    view.renderer.render(view.scene, view.camera);
+  }
+  requestAnimationFrame(animate3D);
+}
+
+async function loadAll() {
+  const dir = document.getElementById("dir").value.replace(/\/+$/, "");
+  const physPath = document.getElementById("physPath").value.trim();
+  const status = document.getElementById("status");
+  status.textContent = " loading...";
+  try {
+    const [nodes, edges, hard, hardmacro, soft, sources, meta, layers] = await Promise.all([
+      loadTsv(`${dir}/nodes.tsv`),
+      loadTsv(`${dir}/edges.tsv`),
+      loadTsv(`${dir}/hard.tsv`),
+      loadTsv(`${dir}/hardmacro.tsv`),
+      loadTsv(`${dir}/soft.tsv`),
+      loadTsv(`${dir}/sources.tsv`),
+      loadTsv(`${dir}/meta.tsv`),
+      loadTsv(`${dir}/layers.tsv`)
+    ]);
+    let pdnPhysical = [];
+    try { pdnPhysical = await loadTsv(physPath); } catch (_) { pdnPhysical = []; }
+
+    const coreRing = pdnPhysical.filter(r => r.kind === "ring");
+    const sourceNodes = nodes
+      .filter(n => num(n.src_g) > 0)
+      .map(n => ({ x_um: num(n.x_um), y_um: num(n.y_um) }));
+    const padContacts = sources.map(s => ({
+      x_um: 0.5 * (num(s.llx_um) + num(s.urx_um)),
+      y_um: 0.5 * (num(s.lly_um) + num(s.ury_um)),
+    }));
+
+    drawHeat(nodes, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, meta);
+    drawCurrent(nodes, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, meta);
+    drawGraph(nodes, edges, meta);
+    renderStats(meta, nodes);
+    document.getElementById("meta").textContent = meta.map(r => `${r.key}: ${r.value}`).join("\n");
+    buildLayerToggles(layers);
+
+    sceneState.loaded = { nodes, edges, hard, hardmacro, soft, sourceNodes, padContacts, coreRing, meta, layers, pdnPhysical };
+    render3D();
+    status.textContent = ` loaded ${nodes.length} nodes, ${edges.length} edges, ${layers.length} layers`;
+  } catch (err) {
+    console.error(err);
+    status.textContent = ` error: ${err.message}`;
+  }
+}
+
+document.getElementById("load").addEventListener("click", loadAll);
+document.getElementById("edges").addEventListener("change", loadAll);
+document.getElementById("labels").addEventListener("change", loadAll);
+for (const id of ["showSources3d", "showPads3d", "showCoreRing3d", "showHardMacro3d", "showHardPins3d", "showSoft3d", "showAbsNodes3d", "showAbsEdges3d"]) {
+  document.getElementById(id).addEventListener("change", render3D);
+}
+for (const id of ["irShowSources", "irShowPads", "irShowCoreRing", "irShowHardMacro", "irShowHardPins", "irShowSoft", "irShowNodeGrid"]) {
+  document.getElementById(id).addEventListener("change", loadAll);
+}
+for (const btn of document.querySelectorAll(".view-presets button")) {
+  btn.addEventListener("click", () => {
+    if (!sceneState.loaded) return;
+    const meta = metaMap(sceneState.loaded.meta);
+    const target = btn.dataset.viewTarget;
+    const preset = btn.dataset.view;
+    const view = target === "phys3d" ? sceneState.physical : sceneState.abstract;
+    setPresetView(view, meta, preset);
+  });
+}
+
+animate3D();
+loadAll();
+</script>
+</body>
+</html>

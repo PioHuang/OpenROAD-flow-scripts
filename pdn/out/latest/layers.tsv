@@ -1,0 +1,5 @@
+layer_index	layer_name	orientation	nx	ny	pitch_x_um	pitch_y_um	wire_step_um	first_node
+0	metal4	vertical	20	20	56	56	56	0
+1	metal5	horizontal	109	108	10	10	10	400
+2	metal6	vertical	109	108	10	10	10	12172
+3	metal7	horizontal	37	36	30	30	30	23944

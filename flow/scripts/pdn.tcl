@@ -21,6 +21,19 @@ foreach net [$block getNets] {
 
 report_design_area
 
+# Optional: dump PSM `-vsrc` geometry from IO/package terminals (floorplan / PDN stage).
+# Research flows that stop before route should use this, not finish `final_report.tcl`.
+if { [env_var_equals EXPORT_PSM_VSRC 1] } {
+  source $::env(SCRIPTS_DIR)/export_psm_vsrc.tcl
+  export_psm_vsrc_from_bterms $::env(REPORTS_DIR)
+}
+
+# Optional: dump real PDN via locations (from special-net dbSBox vias) at floorplan/PDN stage.
+if { [env_var_equals EXPORT_PDN_VIAS 1] } {
+  source $::env(SCRIPTS_DIR)/export_pdn_vias.tcl
+  export_pdn_vias_from_special_nets $::env(REPORTS_DIR)
+}
+
 orfs_write_db $::env(RESULTS_DIR)/2_4_floorplan_pdn.odb
 
 # Optional second ODB with soft module dbRegion/dbGroup for floorplan GUI review only.

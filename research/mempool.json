@@ -17,8 +17,9 @@
       10,
       10
     ],
-    "odb": "",
-    "def": ""
+    "odb": "flow/results/nangate45/mempool_group/base/2_floorplan.odb",
+    "def_input": "flow/results/nangate45/mempool_group/base/2_floorplan.def",
+    "def_output_fenced": "flow/results/nangate45/mempool_group/base/2_floorplan_fenced.def"
   },
   "kit": {
     "tech_lef": "flow/platforms/nangate45/lef/NangateOpenCellLibrary.tech.lef",
@@ -41,12 +42,15 @@
     "route_clk_min": "metal4",
     "set_rc_tcl": "flow/platforms/nangate45/setRC.tcl",
     "tracks_tcl": "flow/platforms/nangate45/make_tracks.tcl",
-    "pdn_tcl": "flow/platforms/nangate45/grid_strategy-M1-M4-M7.tcl"
+    "pdn_tcl": "flow/designs/nangate45/mempool_group/pdn.tcl"
   },
-  "pwr": [],
+  "psm_vsrc_file": "research/out/floorplan_db_extract/psm_vsrc_VDD.loc",
+  "psm_vsrc_boxes_file": "research/out/floorplan_db_extract/psm_vsrc_boxes_VDD.tsv",
+  "pdn_vias_file": "research/out/floorplan_db_extract/pdn_vias_VDD.tsv",
+  "pdn_shapes_file": "research/out/floorplan_db_extract/db_pdn_shapes.tsv",
+  "ir_vsrc_center_node_only": false,
   "report_power_instances_tsv": "flow/reports/nangate45/mempool_group/base/report_power_instances.tsv",
-  "instance_geom_tsv": "flow/reports/nangate45/mempool_group/base/instance_geom.tsv",
+  "instance_geom_tsv": "research/out/floorplan_db_extract/db_instances.tsv",
   "groups": "flow/reports/nangate45/mempool_group/base/rtlmp_instance_to_cluster.txt",
-  "fp_dbu_per_um": 2000,
   "rtl_fp": "flow/objects/nangate45/mempool_group/base/rtlmp_extract/root.fp.txt"
 }

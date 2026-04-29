@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research IR plots</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, "Segoe UI", Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f4f4f5;
+      color: #18181b;
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 16px 0; }
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    button, label.filebtn {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid #27272a;
+      background: #fafafa;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button.primary, label.filebtn {
+      background: #18181b;
+      color: #fafafa;
+      border-color: #18181b;
+    }
+    button:hover, label.filebtn:hover { opacity: 0.88; }
+    button.active {
+      background: #3b82f6;
+      border-color: #2563eb;
+      color: #fff;
+    }
+    #status {
+      font-size: 0.85rem;
+      color: #71717a;
+      min-height: 1.2em;
+      margin-bottom: 12px;
+    }
+    #frame {
+      background: #fff;
+      border: 1px solid #d4d4d8;
+      border-radius: 8px;
+      padding: 12px;
+      max-width: 100%;
+      overflow: auto;
+    }
+    #plot {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-width: none;
+    }
+    #zoomBar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1px solid #d4d4d8;
+      border-radius: 8px;
+      max-width: 100%;
+    }
+    #zoomBar label { font-size: 0.85rem; color: #52525b; }
+    #zoomSlider {
+      flex: 1 1 180px;
+      min-width: 120px;
+      max-width: 360px;
+    }
+    #zoomValue { min-width: 3.5em; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input[type="text"] {
+      min-width: 220px;
+      padding: 6px 10px;
+      border: 1px solid #d4d4d8;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    #fileInput { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Research IR / PDN mesh plots</h1>
+
+  <div id="controls">
+    <span class="row">
+      <button type="button" class="plot-btn primary active" data-kind="current">Mesh current</button>
+      <button type="button" class="plot-btn primary" data-kind="voltage">Mesh voltage</button>
+      <button type="button" class="plot-btn primary" data-kind="sources">VDD sources</button>
+      <button type="button" class="plot-btn primary" data-kind="model">PDN model</button>
+      <button type="button" class="plot-btn primary" data-kind="model3d">PDN model 3D</button>
+      <button type="button" class="plot-btn" data-kind="pdn_graph" title="Exact graph exported by solver (ir_pdn_graph_nodes/edges.tsv)">
+        PDN graph (solver)
+      </button>
+      <button type="button" class="plot-btn" data-kind="pdn_tcl_physical" title="Canvas view from research/out/pdn_tcl_physical.tsv (run phys_load first)">
+        PDN Tcl physical
+      </button>
+    </span>
+    <span class="row">
+      <button type="button" id="btnRefresh">Refresh</button>
+      <label class="filebtn"><input type="file" id="fileInput" accept=".png" />Open PNG from disk</label>
+    </span>
+  </div>
+
+  <div class="row" style="margin-bottom:10px;">
+    <label>manifest (rel. repo): <input type="text" id="manifest" value="research/mempool.json" /></label>
+    <label>mesh TSV: <input type="text" id="mesh" value="research/out/ir_mesh_nodes.tsv" /></label>
+  </div>
+
+  <div id="zoomBar">
+    <label for="zoomSlider">Zoom</label>
+    <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+    <input type="range" id="zoomSlider" min="25" max="300" value="100" step="5" />
+    <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+    <span id="zoomValue">100%</span>
+  </div>
+
+  <div id="status"></div>
+  <div id="frame">
+    <img id="plot" alt="plot" />
+    <div id="pdnPhysicalRoot" style="display: none; width: 100%; max-width: 100%;">
+      <h2 style="font-size: 1rem; font-weight: 600; margin: 0 0 8px 0; color: #27272a;">Integrated — all layers</h2>
+      <p style="font-size: 0.8rem; color: #71717a; margin: 0 0 8px 0;">Same scale as per-layer tiles; straps from parsed PDN Tcl (phys_load).</p>
+      <canvas
+        id="pdnCanvasIntegrated"
+        width="900"
+        height="900"
+        style="display: block; max-width: 100%; height: auto; border: 1px solid #d4d4d8; border-radius: 6px; background: #fafafa;"
+      ></canvas>
+      <h2 style="font-size: 1rem; font-weight: 600; margin: 20px 0 8px 0; color: #27272a;">By metal layer</h2>
+      <div id="pdnLayerGrid" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-bottom: 12px;"></div>
+      <pre
+        id="pdnConnects"
+        style="font-size: 0.78rem; color: #3f3f46; max-height: 180px; overflow: auto; background: #fff; border: 1px solid #e4e4e7; padding: 8px; border-radius: 6px; margin: 0;"
+      ></pre>
+    </div>
+    <div id="pdnGraphRoot" style="display: none; width: 100%; max-width: 100%;">
+      <h2 style="font-size: 1rem; font-weight: 600; margin: 0 0 8px 0; color: #27272a;">Solver graph view</h2>
+      <p style="font-size: 0.8rem; color: #71717a; margin: 0 0 8px 0;">Drawn from <code>ir_pdn_graph_nodes.tsv</code> and <code>ir_pdn_graph_edges.tsv</code>.</p>
+      <canvas id="pdnGraphCanvas" width="980" height="760" style="display:block;max-width:100%;height:auto;border:1px solid #d4d4d8;border-radius:6px;background:#fff;"></canvas>
+      <div id="pdnGraphMeta" style="margin-top:10px;font-size:0.78rem;color:#3f3f46;max-height:220px;overflow:auto;background:#fff;border:1px solid #e4e4e7;padding:8px;border-radius:6px;"></div>
+    </div>
+    <!-- model3d: two Plotly iframes (research/out/ir_pdn_model_3d_{std,macro}.html); pip install plotly -->
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

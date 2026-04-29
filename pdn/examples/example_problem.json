@@ -1,0 +1,83 @@
+{
+  "core_um": [0.0, 0.0, 100.0, 100.0],
+  "observation_layer": "M5",
+  "observation_pitch_um": 10.0,
+  "layers": [
+    {
+      "name": "M5",
+      "orientation": "horizontal",
+      "rank": 5,
+      "pitch_um": 20.0,
+      "width_um": 2.0,
+      "sheet_resistance_ohm_per_square": 0.08
+    },
+    {
+      "name": "M6",
+      "orientation": "vertical",
+      "rank": 6,
+      "pitch_um": 20.0,
+      "width_um": 2.0,
+      "sheet_resistance_ohm_per_square": 0.08
+    },
+    {
+      "name": "M7",
+      "orientation": "horizontal",
+      "rank": 7,
+      "pitch_um": 40.0,
+      "width_um": 4.0,
+      "sheet_resistance_ohm_per_square": 0.04
+    }
+  ],
+  "via_connections": [
+    {
+      "lower_layer": "M5",
+      "upper_layer": "M6",
+      "resistance_ohm": 0.01
+    },
+    {
+      "lower_layer": "M6",
+      "upper_layer": "M7",
+      "resistance_ohm": 0.01
+    }
+  ],
+  "voltage_sources": [
+    {
+      "layer": "M7",
+      "region_um": [0.0, 0.0, 10.0, 10.0],
+      "voltage_v": 0.8
+    },
+    {
+      "layer": "M7",
+      "region_um": [90.0, 90.0, 100.0, 100.0],
+      "voltage_v": 0.8
+    }
+  ],
+  "point_loads": [
+    {
+      "name": "macro_a",
+      "layer": "M6",
+      "location_um": [30.0, 80.0],
+      "current_a": 0.03
+    },
+    {
+      "name": "macro_b",
+      "layer": "M6",
+      "location_um": [75.0, 30.0],
+      "current_a": 0.02
+    }
+  ],
+  "distributed_loads": [
+    {
+      "name": "soft_cluster_0",
+      "layer": "M5",
+      "region_um": [20.0, 20.0, 60.0, 60.0],
+      "total_current_a": 0.12
+    },
+    {
+      "name": "soft_cluster_1",
+      "layer": "M5",
+      "region_um": [55.0, 55.0, 90.0, 90.0],
+      "total_current_a": 0.08
+    }
+  ]
+}

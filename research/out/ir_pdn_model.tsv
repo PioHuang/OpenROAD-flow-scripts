@@ -1,0 +1,8 @@
+kind	layer_idx	layer_name	direction	g_per_segment	rank	avg_v	unknown_nodes	source_layer	load_layer	total_nodes	fixed_nodes	unknown_total	isolated_nodes	isolated_loaded_nodes	isolated_fixed_nodes	via_from	via_to	g_via
+layer	0	metal5	H	84.9175	5	1.09947	3568	2	3	9216	41	9175	0	0	0			
+layer	1	metal6	V	66.5491	6	1.09945	2000	2	3	9216	41	9175	0	0	0			
+layer	2	metal7	H	126.223	7	1.09942	999	2	3	9216	41	9175	0	0	0			
+layer	3	metal4	V	12.115	4	1.09942	2608	2	3	9216	41	9175	0	0	0			
+via								2	3	9216	41	9175	0	0	0	0	1	33.2745
+via								2	3	9216	41	9175	0	0	0	0	3	33.2745
+via								2	3	9216	41	9175	0	0	0	1	2	33.2745

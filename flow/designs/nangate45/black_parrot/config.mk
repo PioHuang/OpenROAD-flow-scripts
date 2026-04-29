@@ -57,3 +57,13 @@ export SYNTH_KEEP_MODULES = \
   hard_mem_1rw_d256_w95_wrapper \
   hard_mem_1rw_d512_w64_wrapper \
   icache_eaddr_width_p64_data_width_p64_inst_width_p32_tag_width_p10_num_cce_p1_num_lce_p2_ways_p8_lce_sets_p64_block_size_in_bytes_p8
+
+# Keep RTLMP artifacts available when macro placement is used.
+export RTLMP_KEEP_CLUSTERING_DATA = 1
+export RTLMP_DEBUG_FLOORPLAN = 1
+export RTLMP_RPT_DIR = $(OBJECTS_DIR)/rtlmp_extract
+
+# Research flow support: export PDNSim-style source geometry and real PDN via sites
+# at floorplan/PDN stage for research/phys_load.
+export EXPORT_PSM_VSRC = 1
+export EXPORT_PDN_VIAS = 1

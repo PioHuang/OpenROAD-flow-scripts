@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PDN Voltage + Graph Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 12px; background: #111; color: #ddd; }
+    h1, h2 { margin: 8px 0; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .panel { background: #1b1b1b; border: 1px solid #333; padding: 10px; border-radius: 6px; }
+    canvas { background: #000; border: 1px solid #444; }
+    .meta { white-space: pre-wrap; font-size: 13px; }
+    label { margin-right: 8px; }
+    input[type="text"] { width: 280px; }
+  </style>
+</head>
+<body>
+  <h1>PDN Result GUI</h1>
+  <div class="panel">
+    <label>Dump directory: <input id="dumpDir" type="text" value="/out/latest"></label>
+    <button id="loadBtn">Load</button>
+    <label><input id="drawEdges" type="checkbox" checked> draw graph edges</label>
+    <label><input id="onlyObs" type="checkbox" checked> only observation layer nodes</label>
+    <span id="status"></span>
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <h2>Voltage Map + Modules</h2>
+      <canvas id="voltageCanvas" width="900" height="700"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Graph Preview</h2>
+      <canvas id="graphCanvas" width="900" height="700"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Meta</h2>
+    <div id="meta" class="meta"></div>
+  </div>
+
+  <script>
+    function parseTsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length < 2) return [];
+      const header = lines[0].split("\t");
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i]) continue;
+        const cols = lines[i].split("\t");
+        const row = {};
+        for (let j = 0; j < header.length; j++) row[header[j]] = cols[j] ?? "";
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    async function loadTsv(path) {
+      const resp = await fetch(path);
+      if (!resp.ok) throw new Error(`Failed to fetch ${path}: ${resp.status}`);
+      return parseTsv(await resp.text());
+    }
+
+    function number(v, d = 0) {
+      const x = Number(v);
+      return Number.isFinite(x) ? x : d;
+    }
+
+    function colorForValue(v, lo, hi) {
+      const t = hi > lo ? (v - lo) / (hi - lo) : 0.5;
+      const r = Math.floor(255 * (1 - t));
+      const g = Math.floor(255 * t);
+      return `rgb(${r},${g},80)`;
+    }
+
+    function setupTransform(metaRows, width, height, pad = 30) {
+      const m = {};
+      for (const row of metaRows) m[row.key] = row.value;
+      const llx = number(m.core_llx_um), lly = number(m.core_lly_um);
+      const urx = number(m.core_urx_um), ury = number(m.core_ury_um);
+      const sx = (width - 2 * pad) / Math.max(1e-9, urx - llx);
+      const sy = (height - 2 * pad) / Math.max(1e-9, ury - lly);
+      return {
+        llx, lly, urx, ury,
+        tx: x => pad + (x - llx) * sx,
+        ty: y => height - pad - (y - lly) * sy
+      };
+    }
+
+    function drawVoltage(canvas, nodes, edges, dloads, ploads, vsrc, metaRows, onlyObs, drawEdges) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const tf = setupTransform(metaRows, canvas.width, canvas.height);
+      const meta = {};
+      for (const row of metaRows) meta[row.key] = row.value;
+      const obs = meta.observation_layer ?? "";
+
+      let filtered = nodes;
+      if (onlyObs) filtered = nodes.filter(n => n.layer_name === obs);
+      const lo = Math.min(...filtered.map(n => number(n.voltage_v, 0)));
+      const hi = Math.max(...filtered.map(n => number(n.voltage_v, 0)));
+
+      const byId = new Map(nodes.map(n => [number(n.id), n]));
+      if (drawEdges) {
+        ctx.strokeStyle = "rgba(120,120,255,0.15)";
+        ctx.lineWidth = 1;
+        const maxEdges = 30000;
+        for (let i = 0; i < edges.length && i < maxEdges; i++) {
+          const e = edges[i];
+          const a = byId.get(number(e.from));
+          const b = byId.get(number(e.to));
+          if (!a || !b) continue;
+          if (onlyObs && (a.layer_name !== obs || b.layer_name !== obs)) continue;
+          ctx.beginPath();
+          ctx.moveTo(tf.tx(number(a.x_um)), tf.ty(number(a.y_um)));
+          ctx.lineTo(tf.tx(number(b.x_um)), tf.ty(number(b.y_um)));
+          ctx.stroke();
+        }
+      }
+
+      for (const n of filtered) {
+        const x = tf.tx(number(n.x_um));
+        const y = tf.ty(number(n.y_um));
+        ctx.fillStyle = colorForValue(number(n.voltage_v), lo, hi);
+        ctx.beginPath();
+        ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Soft modules (distributed loads): cyan rectangles.
+      ctx.strokeStyle = "rgba(0,255,255,0.9)";
+      ctx.lineWidth = 1.5;
+      for (const d of dloads) {
+        if (onlyObs && d.layer !== obs) continue;
+        const x0 = tf.tx(number(d.llx_um)), y0 = tf.ty(number(d.lly_um));
+        const x1 = tf.tx(number(d.urx_um)), y1 = tf.ty(number(d.ury_um));
+        ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+      }
+
+      // Hard modules (point loads): magenta crosses.
+      ctx.strokeStyle = "rgba(255,60,255,0.95)";
+      for (const p of ploads) {
+        if (onlyObs && p.layer !== obs) continue;
+        const x = tf.tx(number(p.x_um)), y = tf.ty(number(p.y_um));
+        ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - 4, y + 4); ctx.lineTo(x + 4, y - 4); ctx.stroke();
+      }
+
+      // Voltage sources: yellow boxes.
+      ctx.strokeStyle = "rgba(255,235,59,0.95)";
+      for (const s of vsrc) {
+        const x0 = tf.tx(number(s.llx_um)), y0 = tf.ty(number(s.lly_um));
+        const x1 = tf.tx(number(s.urx_um)), y1 = tf.ty(number(s.ury_um));
+        ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+      }
+    }
+
+    function drawGraphPreview(canvas, nodes, edges, metaRows) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const tf = setupTransform(metaRows, canvas.width, canvas.height);
+      const byId = new Map(nodes.map(n => [number(n.id), n]));
+
+      ctx.strokeStyle = "rgba(180,180,255,0.2)";
+      ctx.lineWidth = 0.8;
+      const maxEdges = 50000;
+      for (let i = 0; i < edges.length && i < maxEdges; i++) {
+        const e = edges[i];
+        const a = byId.get(number(e.from));
+        const b = byId.get(number(e.to));
+        if (!a || !b) continue;
+        ctx.beginPath();
+        ctx.moveTo(tf.tx(number(a.x_um)), tf.ty(number(a.y_um)));
+        ctx.lineTo(tf.tx(number(b.x_um)), tf.ty(number(b.y_um)));
+        ctx.stroke();
+      }
+
+      for (const n of nodes) {
+        ctx.fillStyle = n.fixed_voltage === "1" ? "rgb(255,235,59)" : "rgba(255,255,255,0.6)";
+        ctx.beginPath();
+        ctx.arc(tf.tx(number(n.x_um)), tf.ty(number(n.y_um)), 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    async function loadAll() {
+      const dumpDir = document.getElementById("dumpDir").value.replace(/\/+$/, "");
+      const status = document.getElementById("status");
+      status.textContent = " loading...";
+      try {
+        const [nodes, edges, dloads, ploads, vsrc, metaRows] = await Promise.all([
+          loadTsv(`${dumpDir}/nodes.tsv`),
+          loadTsv(`${dumpDir}/edges.tsv`),
+          loadTsv(`${dumpDir}/distributed_loads.tsv`),
+          loadTsv(`${dumpDir}/point_loads.tsv`),
+          loadTsv(`${dumpDir}/voltage_sources.tsv`),
+          loadTsv(`${dumpDir}/meta.tsv`)
+        ]);
+        const onlyObs = document.getElementById("onlyObs").checked;
+        const drawEdges = document.getElementById("drawEdges").checked;
+        drawVoltage(document.getElementById("voltageCanvas"), nodes, edges, dloads, ploads, vsrc, metaRows, onlyObs, drawEdges);
+        drawGraphPreview(document.getElementById("graphCanvas"), nodes, edges, metaRows);
+        document.getElementById("meta").textContent = metaRows.map(r => `${r.key}: ${r.value}`).join("\n");
+        status.textContent = ` loaded (${nodes.length} nodes, ${edges.length} edges)`;
+      } catch (err) {
+        console.error(err);
+        status.textContent = ` error: ${err.message}`;
+      }
+    }
+
+    document.getElementById("loadBtn").addEventListener("click", loadAll);
+    document.getElementById("drawEdges").addEventListener("change", loadAll);
+    document.getElementById("onlyObs").addEventListener("change", loadAll);
+    loadAll();
+  </script>
+</body>
+</html>

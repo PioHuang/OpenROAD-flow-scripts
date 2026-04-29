@@ -1,0 +1,11 @@
+key	value
+core_llx_um	10
+core_lly_um	12
+core_urx_um	1090
+core_ury_um	1090
+observation_layer	metal4
+observation_pitch_um	56
+min_voltage_v	0.999933
+max_voltage_v	1
+iterations	299
+residual_l2	1.54028e-05

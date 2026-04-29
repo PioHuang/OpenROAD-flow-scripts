@@ -903,13 +903,15 @@ ABC_AREA:
   default: 0
 PWR_NETS_VOLTAGES:
   description: |
-    Used for IR Drop calculation.
+    Used for IR drop calculation, PSM `-vsrc` export at floorplan (PDN), etc.
   stages:
+    - floorplan
     - final
 GND_NETS_VOLTAGES:
   description: |
-    Used for IR Drop calculation.
+    Used for IR drop calculation.
   stages:
+    - floorplan
     - final
 BLOCKS:
   description: >
