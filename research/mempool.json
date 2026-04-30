@@ -42,7 +42,7 @@
     "route_clk_min": "metal4",
     "set_rc_tcl": "flow/platforms/nangate45/setRC.tcl",
     "tracks_tcl": "flow/platforms/nangate45/make_tracks.tcl",
-    "pdn_tcl": "flow/designs/nangate45/mempool_group/pdn.tcl"
+    "pdn_tcl": "research/design/platforms/nangate45/tcl/grid_strategy-M1-M4-M7.tcl"
   },
   "psm_vsrc_file": "research/out/floorplan_db_extract/psm_vsrc_VDD.loc",
   "psm_vsrc_boxes_file": "research/out/floorplan_db_extract/psm_vsrc_boxes_VDD.tsv",
