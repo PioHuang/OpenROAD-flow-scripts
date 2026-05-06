@@ -4,6 +4,9 @@ export PLATFORM    = nangate45
 
 export SYNTH_HIERARCHICAL = 1
 #
+export SYNTH_PRESERVE_RTL_HIERARCHY = 1
+export SYNTH_HIER_SEPARATOR = /
+export OPENROAD_HIERARCHICAL = 0
 
 export VERILOG_FILES = $(DESIGN_HOME)/src/$(DESIGN_NAME)/pickled.v \
                        $(DESIGN_HOME)/$(PLATFORM)/$(DESIGN_NAME)/macros.v

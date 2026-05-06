@@ -8,6 +8,7 @@ set -euo pipefail
 # Examples:
 #   bash research/scripts/run.sh
 #   bash research/scripts/run.sh --design black_parrot --manifest research/black_parrot.json
+# Post-PDN DEF for 1142PDN (optional): bash research/scripts/export_pdn_def_for_1142pdn.sh → 1142PDN/out/<design>_pdn.def
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -60,6 +61,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --use-rtlmp-soft-guidance: generate GPL soft guidance from RTLMP reports and pass to do-place."
       echo "  --soft-guidance-weight: weight passed to global_placement -soft_guidance_weight (default: 0.6)."
       echo "  --soft-guidance-stage: where to apply guidance: skip_io|gp|both (default: skip_io)."
+      echo "  Post-PDN DEF for 1142PDN: research/scripts/export_pdn_def_for_1142pdn.sh → 1142PDN/out/<design>_pdn.def"
       exit 0
       ;;
     *)
