@@ -56,11 +56,11 @@ def add_core_patches(axes, core: tuple[float, float, float, float] | None) -> No
         )
 
 
-def load_pins(tsv: Path) -> tuple[np.ndarray, np.ndarray]:
-    if not tsv.is_file():
+def load_pins(csv: Path) -> tuple[np.ndarray, np.ndarray]:
+    if not csv.is_file():
         return np.array([]), np.array([])
     px, py = [], []
-    with tsv.open(newline="") as f:
+    with csv.open(newline="") as f:
         r = csv.DictReader(f, delimiter="\t")
         for row in r:
             px.append(float(row["pin_x_um"]))
@@ -79,10 +79,10 @@ def draw_mesh_edges(ax, ix, iy, x, y, alpha=0.3, lw=0.3):
             ax.plot([xp, x2], [yp, y2], "k-", lw=lw, alpha=alpha, zorder=1)
 
 
-def load_mesh_current(tsv: Path):
+def load_mesh_current(csv: Path):
     ix, iy, x, y = [], [], [], []
     i_soft, i_hard = [], []
-    with tsv.open(newline="") as f:
+    with csv.open(newline="") as f:
         r = csv.DictReader(f, delimiter="\t")
         for row in r:
             ix.append(int(row["ix"]))
@@ -98,9 +98,9 @@ def load_mesh_current(tsv: Path):
     return np.array(ix), np.array(iy), x, y, s, h, s + h
 
 
-def load_mesh_voltage(tsv: Path):
+def load_mesh_voltage(csv: Path):
     ix, iy, x, y, v = [], [], [], [], []
-    with tsv.open(newline="") as f:
+    with csv.open(newline="") as f:
         r = csv.DictReader(f, delimiter="\t")
         for row in r:
             ix.append(int(row["ix"]))
@@ -135,7 +135,7 @@ def scatter_field(ax, x, y, c, title, cmap, vmin, vmax, pt):
 def cmd_current(args: argparse.Namespace, root: Path) -> None:
     mesh = args.mesh
     if not mesh.is_file():
-        raise SystemExit(f"Mesh TSV not found: {mesh}")
+        raise SystemExit(f"Mesh CSV not found: {mesh}")
 
     ix, iy, x, y, i_soft, i_hard, i_tot = load_mesh_current(mesh)
     px, py = load_pins(args.hard)
@@ -187,7 +187,7 @@ def cmd_current(args: argparse.Namespace, root: Path) -> None:
 def cmd_voltage(args: argparse.Namespace, root: Path) -> None:
     mesh = args.mesh
     if not mesh.is_file():
-        raise SystemExit(f"Mesh TSV not found: {mesh}")
+        raise SystemExit(f"Mesh CSV not found: {mesh}")
 
     ix, iy, x, y, v = load_mesh_voltage(mesh)
     px, py = load_pins(args.hard)
@@ -252,8 +252,8 @@ def main() -> None:
         choices=["current", "voltage"],
         help="Plot type (default: current)",
     )
-    ap.add_argument("--mesh", type=Path, default=root / "research/out/ir_mesh_nodes.tsv")
-    ap.add_argument("--hard", type=Path, default=root / "research/out/ir_hard_macros.tsv")
+    ap.add_argument("--mesh", type=Path, default=root / "research/out/ir_mesh_nodes.csv")
+    ap.add_argument("--hard", type=Path, default=root / "research/out/ir_hard_macros.csv")
     ap.add_argument("--dpi", type=int, default=220)
     ap.add_argument(
         "--out",

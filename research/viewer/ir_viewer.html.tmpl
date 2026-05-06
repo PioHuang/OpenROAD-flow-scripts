@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>phys_load IR viewer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f6f7f9; color: #1f2328; }
+  #app { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: auto 1fr;
+         height: 100vh; }
+  header { grid-column: 1 / 3; padding: 10px 16px; background: #ffffff;
+           border-bottom: 1px solid #d0d7de; display: flex; align-items: center;
+           gap: 16px; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .meta { font-size: 12px; color: #57606a; }
+  aside { padding: 14px; background: #ffffff; border-right: 1px solid #d0d7de;
+          overflow: auto; }
+  aside h2 { font-size: 12px; text-transform: uppercase; color: #57606a;
+             margin: 0 0 6px; letter-spacing: 0.04em; font-weight: 600; }
+  aside section { margin-bottom: 18px; }
+  aside label { display: block; font-size: 13px; margin: 4px 0; }
+  aside select, aside input[type=range] { width: 100%; }
+  .stat { display: flex; justify-content: space-between; font-size: 13px;
+          padding: 2px 0; border-bottom: 1px dashed #eaeef2; }
+  .stat b { font-weight: 600; }
+  main { position: relative; }
+  #plot { position: absolute; inset: 0; }
+  button { font: inherit; padding: 6px 10px; border: 1px solid #d0d7de;
+           background: #f6f8fa; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #eaeef2; }
+  .row { display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="design-title">phys_load IR viewer</h1>
+    <span class="meta" id="design-meta"></span>
+    <span style="flex:1"></span>
+    <button id="btn-png">Download PNG</button>
+  </header>
+  <aside>
+    <section>
+      <h2>Summary</h2>
+      <div class="stat"><span>Design</span><b id="s-design">-</b></div>
+      <div class="stat"><span>VDD (V)</span><b id="s-vdd">-</b></div>
+      <div class="stat"><span>V_min (V)</span><b id="s-vmin">-</b></div>
+      <div class="stat"><span>V_max (V)</span><b id="s-vmax">-</b></div>
+      <div class="stat"><span>drop_max (mV)</span><b id="s-drop">-</b></div>
+      <div class="stat"><span>Mesh</span><b id="s-mesh">-</b></div>
+      <div class="stat"><span>V-sources</span><b id="s-vsrc">-</b></div>
+      <div class="stat"><span>Hard pins</span><b id="s-hard">-</b></div>
+      <div class="stat"><span>Soft clusters</span><b id="s-soft">-</b></div>
+    </section>
+
+    <section>
+      <h2>Mesh field</h2>
+      <label><input type="radio" name="field" value="v" checked> Voltage (V)</label>
+      <label><input type="radio" name="field" value="drop"> IR drop (mV)</label>
+      <label><input type="radio" name="field" value="i_total"> Current total (A)</label>
+      <label><input type="radio" name="field" value="i_hard"> Current hard (A)</label>
+      <label><input type="radio" name="field" value="i_soft"> Current soft (A)</label>
+    </section>
+
+    <section>
+      <h2>Colormap</h2>
+      <select id="cmap">
+        <option value="Turbo" selected>Turbo</option>
+        <option value="Viridis">Viridis</option>
+        <option value="Plasma">Plasma</option>
+        <option value="Inferno">Inferno</option>
+        <option value="Magma">Magma</option>
+        <option value="RdYlGn">RdYlGn</option>
+        <option value="Cividis">Cividis</option>
+      </select>
+      <label><input type="checkbox" id="reverse-cmap"> reverse scale</label>
+    </section>
+
+    <section>
+      <h2>Overlays</h2>
+      <label><input type="checkbox" id="show-vsrc" checked> voltage sources</label>
+      <label><input type="checkbox" id="show-hard" checked> hard macro PG pins</label>
+      <label><input type="checkbox" id="show-soft"> soft cluster boxes</label>
+      <label><input type="checkbox" id="show-core" checked> core rectangle</label>
+      <label><input type="checkbox" id="show-die"> die rectangle</label>
+    </section>
+
+    <section>
+      <h2>Threshold (highlight below)</h2>
+      <label><input type="checkbox" id="th-enable"> enable</label>
+      <div id="th-wrap" style="display:none">
+        <div class="row">
+          <input type="range" id="th-slider" min="0" max="100" value="50">
+          <span id="th-val" style="font-size:12px; min-width:60px; text-align:right"></span>
+        </div>
+      </div>
+    </section>
+  </aside>
+  <main><div id="plot"></div></main>
+</div>
+
+<script>
+// eslint-disable-next-line no-unused-vars
+const DATA = /*__IR_DATA_JSON__*/ null;
+
+(function () {
+  if (!DATA) {
+    document.getElementById("plot").innerHTML =
+      "<p style='padding:24px'>No data embedded. Regenerate with pack_viewer.py.</p>";
+    return;
+  }
+
+  const fmtNum = (x, d = 4) => (x === null || !isFinite(x)) ? "-" : Number(x).toFixed(d);
+
+  const mesh = DATA.mesh;
+  const drop_mv = mesh.v.map(row => row.map(v => isFinite(v) ? (DATA.vdd - v) * 1000.0 : null));
+  const fields = {
+    v:        { z: mesh.v,       label: "voltage (V)",         fmt: x => fmtNum(x, 4) + " V" },
+    drop:     { z: drop_mv,      label: "IR drop (mV)",        fmt: x => fmtNum(x, 2) + " mV" },
+    i_total:  { z: mesh.i_total, label: "current total (A)",   fmt: x => fmtNum(x, 5) + " A" },
+    i_hard:   { z: mesh.i_hard,  label: "current hard (A)",    fmt: x => fmtNum(x, 5) + " A" },
+    i_soft:   { z: mesh.i_soft,  label: "current soft (A)",    fmt: x => fmtNum(x, 5) + " A" },
+  };
+
+  // Summary
+  let vmin = +Infinity, vmax = -Infinity;
+  for (const row of mesh.v) for (const v of row) if (isFinite(v)) { vmin = Math.min(vmin, v); vmax = Math.max(vmax, v); }
+  document.getElementById("design-title").textContent = DATA.design + " - phys_load IR viewer";
+  document.getElementById("design-meta").textContent =
+    "core " + DATA.core.map(v => v.toFixed(0)).join(", ") + " um";
+  document.getElementById("s-design").textContent = DATA.design;
+  document.getElementById("s-vdd").textContent   = fmtNum(DATA.vdd, 4);
+  document.getElementById("s-vmin").textContent  = fmtNum(vmin, 4);
+  document.getElementById("s-vmax").textContent  = fmtNum(vmax, 4);
+  document.getElementById("s-drop").textContent  = fmtNum((DATA.vdd - vmin) * 1000.0, 2);
+  document.getElementById("s-mesh").textContent  = mesh.nx + " x " + mesh.ny;
+  document.getElementById("s-vsrc").textContent  = (DATA.vsrc_nodes || []).length;
+  document.getElementById("s-hard").textContent  = DATA.hard.length;
+  document.getElementById("s-soft").textContent  = DATA.soft.length;
+
+  function currentField() {
+    const r = document.querySelector('input[name="field"]:checked');
+    return r ? r.value : "v";
+  }
+
+  function buildTraces(fieldKey) {
+    const f = fields[fieldKey];
+    const cmap = document.getElementById("cmap").value;
+    const reverse = document.getElementById("reverse-cmap").checked;
+    const threshEnable = document.getElementById("th-enable").checked;
+    const threshVal = parseFloat(document.getElementById("th-val").dataset.raw || "0");
+
+    // Field-aware colormap default bias: voltage uses a reversed scale so
+    // lower-voltage tiles read as "hot" like traditional IR-drop plots.
+    let useReverse = reverse;
+    if (fieldKey === "v") useReverse = !reverse;
+
+    const hoverZ = [];
+    const maskedZ = [];
+    for (let iy = 0; iy < mesh.ny; ++iy) {
+      const rowH = [];
+      const rowM = [];
+      for (let ix = 0; ix < mesh.nx; ++ix) {
+        const v = f.z[iy][ix];
+        rowH.push(v);
+        let show = v;
+        if (threshEnable && isFinite(v)) {
+          // Threshold always expressed on current field; hide cells that are
+          // "better" than threshold to highlight the offenders.
+          const cmp = (fieldKey === "v") ? v : v;
+          const isOffender = (fieldKey === "v") ? (cmp <= threshVal) : (cmp >= threshVal);
+          if (!isOffender) show = null;
+        }
+        rowM.push(show);
+      }
+      hoverZ.push(rowH);
+      maskedZ.push(rowM);
+    }
+
+    const customdata = [];
+    for (let iy = 0; iy < mesh.ny; ++iy) {
+      const rowC = [];
+      for (let ix = 0; ix < mesh.nx; ++ix) {
+        rowC.push([ix, iy, mesh.i_total[iy][ix], mesh.i_hard[iy][ix],
+                   mesh.i_soft[iy][ix], mesh.v[iy][ix], drop_mv[iy][ix]]);
+      }
+      customdata.push(rowC);
+    }
+
+    const heat = {
+      type: "heatmap",
+      x: mesh.x,
+      y: mesh.y,
+      z: maskedZ,
+      colorscale: cmap,
+      reversescale: useReverse,
+      colorbar: { title: f.label, thickness: 14 },
+      hovertemplate:
+        "ix=%{customdata[0]}, iy=%{customdata[1]}<br>" +
+        "x=%{x:.1f} um, y=%{y:.1f} um<br>" +
+        "V=%{customdata[5]:.4f} V (drop=%{customdata[6]:.2f} mV)<br>" +
+        "I_total=%{customdata[2]:.5g} A (hard=%{customdata[3]:.5g}, soft=%{customdata[4]:.5g})" +
+        "<extra></extra>",
+      customdata: customdata,
+      name: f.label,
+      zsmooth: false,
+    };
+
+    const traces = [heat];
+
+    if (document.getElementById("show-vsrc").checked && DATA.vsrc_nodes && DATA.vsrc_nodes.length > 0) {
+      const vs = DATA.vsrc_nodes;
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        x: vs.map(v => v.x_um),
+        y: vs.map(v => v.y_um),
+        marker: {
+          size: 7,
+          symbol: "diamond",
+          color: "#e03030",
+          line: { color: "black", width: 0.5 },
+        },
+        text: vs.map(v => "V-source" + (v.layer ? " " + v.layer : "") +
+          "<br>(" + (v.x_um != null ? v.x_um.toFixed(1) : "?") + ", " +
+          (v.y_um != null ? v.y_um.toFixed(1) : "?") + ") um" +
+          "<br>V=" + (v.v_V != null ? v.v_V.toFixed(4) : "?") + " V"),
+        hoverinfo: "text",
+        name: "V-sources (" + vs.length + ")",
+        showlegend: true,
+      });
+    }
+
+    if (document.getElementById("show-hard").checked && DATA.hard.length > 0) {
+      const iMax = Math.max(...DATA.hard.map(h => h.imax_A));
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        x: DATA.hard.map(h => h.pin_x_um),
+        y: DATA.hard.map(h => h.pin_y_um),
+        marker: {
+          size: DATA.hard.map(h => 6 + 18 * (iMax > 0 ? h.imax_A / iMax : 0)),
+          color: DATA.hard.map(h => h.vpin_est_V),
+          colorscale: cmap,
+          reversescale: useReverse,
+          line: { color: "black", width: 0.4 },
+          showscale: false,
+          cmin: vmin, cmax: vmax,
+        },
+        text: DATA.hard.map(h => h.instance + "<br>pg=" + h.pg_pin_name),
+        hovertemplate:
+          "%{text}<br>pin=(%{x:.1f}, %{y:.1f}) um<br>" +
+          "I=%{marker.size} (marker)  V_pin~=%{marker.color:.4f} V<extra></extra>",
+        name: "hard PG pins",
+      });
+    }
+
+    return traces;
+  }
+
+  function buildShapes() {
+    const shapes = [];
+    if (document.getElementById("show-core").checked) {
+      shapes.push({ type: "rect", xref: "x", yref: "y",
+        x0: DATA.core[0], y0: DATA.core[1], x1: DATA.core[2], y1: DATA.core[3],
+        line: { color: "black", width: 1 }, fillcolor: "rgba(0,0,0,0)" });
+    }
+    if (document.getElementById("show-die").checked && DATA.die) {
+      shapes.push({ type: "rect", xref: "x", yref: "y",
+        x0: DATA.die[0], y0: DATA.die[1], x1: DATA.die[2], y1: DATA.die[3],
+        line: { color: "gray", width: 0.8, dash: "dot" }, fillcolor: "rgba(0,0,0,0)" });
+    }
+    if (document.getElementById("show-soft").checked) {
+      for (const s of DATA.soft) {
+        if (!isFinite(s.lx) || !isFinite(s.ly) || !isFinite(s.ux) || !isFinite(s.uy)) continue;
+        shapes.push({ type: "rect", xref: "x", yref: "y",
+          x0: s.lx, y0: s.ly, x1: s.ux, y1: s.uy,
+          line: { color: "rgba(0,0,0,0.6)", width: 0.6 },
+          fillcolor: "rgba(0,0,0,0)" });
+      }
+    }
+    return shapes;
+  }
+
+  function render() {
+    const f = currentField();
+    const traces = buildTraces(f);
+    const layout = {
+      margin: { l: 60, r: 20, t: 20, b: 50 },
+      xaxis: { title: "x (um)", scaleanchor: "y", scaleratio: 1, constrain: "domain",
+               range: [DATA.core[0] - 10, DATA.core[2] + 10] },
+      yaxis: { title: "y (um)", range: [DATA.core[1] - 10, DATA.core[3] + 10] },
+      shapes: buildShapes(),
+      hovermode: "closest",
+      legend: { x: 0.01, y: 0.99, bgcolor: "rgba(255,255,255,0.85)",
+                font: { size: 11 } },
+      paper_bgcolor: "#ffffff",
+      plot_bgcolor:  "#ffffff",
+    };
+    Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false });
+  }
+
+  // Threshold slider is mapped against the currently selected field's range
+  function refreshThreshold() {
+    const f = currentField();
+    const z = fields[f].z;
+    let lo = +Infinity, hi = -Infinity;
+    for (const row of z) for (const v of row) if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const slider = document.getElementById("th-slider");
+    const pct = parseFloat(slider.value) / 100.0;
+    const val = lo + pct * (hi - lo);
+    document.getElementById("th-val").textContent = val.toFixed(f === "drop" ? 2 : 5);
+    document.getElementById("th-val").dataset.raw = String(val);
+  }
+
+  document.querySelectorAll('input[name="field"]').forEach(el => el.addEventListener("change", () => {
+    refreshThreshold(); render();
+  }));
+  document.getElementById("cmap").addEventListener("change", render);
+  document.getElementById("reverse-cmap").addEventListener("change", render);
+  document.getElementById("show-vsrc").addEventListener("change", render);
+  document.getElementById("show-hard").addEventListener("change", render);
+  document.getElementById("show-soft").addEventListener("change", render);
+  document.getElementById("show-core").addEventListener("change", render);
+  document.getElementById("show-die").addEventListener("change", render);
+
+  const thEnable = document.getElementById("th-enable");
+  const thWrap = document.getElementById("th-wrap");
+  thEnable.addEventListener("change", () => {
+    thWrap.style.display = thEnable.checked ? "" : "none";
+    render();
+  });
+  document.getElementById("th-slider").addEventListener("input", () => {
+    refreshThreshold(); render();
+  });
+
+  document.getElementById("btn-png").addEventListener("click", () => {
+    Plotly.downloadImage("plot", { format: "png", width: 1400, height: 1100,
+                                    filename: DATA.design + "_ir_" + currentField() });
+  });
+
+  refreshThreshold();
+  render();
+})();
+</script>
+</body>
+</html>

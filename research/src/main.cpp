@@ -16,14 +16,63 @@
 int main(int argc, char** argv) {
   try {
     std::filesystem::path manifest = "mempool.json";
-    if (argc >= 2)
-      manifest = argv[1];
+    std::string mesh_mode = "synth";  // synth | odb | multilayer
+    std::filesystem::path pdn_csv;
+    std::string ir_mode_str = "max";  // max (paper, Gx=i) | sum (legacy lumped)
+    double via_r_ohm = 0.0;
+
+    auto print_usage = [&]() {
+      std::cerr << "usage: " << (argc >= 1 ? argv[0] : "phys_load")
+                << " [manifest.json]"
+                << " [--mesh synth|odb|multilayer]"
+                << " [--pdn-csv <path>]"
+                << " [--ir-mode sum|max]"
+                << " [--via-r <ohm>]\n";
+    };
+
+    {
+      int i = 1;
+      if (i < argc && argv[i][0] != '-') {
+        manifest = argv[i++];
+      }
+      for (; i < argc; ++i) {
+        std::string a = argv[i];
+        auto need_val = [&](const char* name) -> std::string {
+          if (i + 1 >= argc)
+            throw std::runtime_error(std::string(name) + " requires a value");
+          return std::string(argv[++i]);
+        };
+        if (a == "--mesh") {
+          mesh_mode = need_val("--mesh");
+          if (mesh_mode != "synth" && mesh_mode != "odb"
+              && mesh_mode != "multilayer")
+            throw std::runtime_error("--mesh must be synth, odb, or multilayer");
+        } else if (a == "--pdn-csv") {
+          pdn_csv = need_val("--pdn-csv");
+        } else if (a == "--ir-mode") {
+          ir_mode_str = need_val("--ir-mode");
+          if (ir_mode_str != "sum" && ir_mode_str != "max")
+            throw std::runtime_error("--ir-mode must be sum or max");
+        } else if (a == "--via-r") {
+          via_r_ohm = std::stod(need_val("--via-r"));
+        } else if (a == "-h" || a == "--help") {
+          print_usage();
+          return 0;
+        } else {
+          print_usage();
+          throw std::runtime_error("unknown arg: " + a);
+        }
+      }
+    }
 
     if (!std::filesystem::is_regular_file(manifest)) {
-      std::cerr << "usage: " << (argc >= 1 ? argv[0] : "phys_load")
-                << " [manifest.json]\n";
+      print_usage();
       return 1;
     }
+    if ((mesh_mode == "odb" || mesh_mode == "multilayer") && pdn_csv.empty())
+      throw std::runtime_error(
+          "--mesh odb/multilayer requires --pdn-csv <path> (produced by "
+          "flow/scripts/dump_pdn_mesh.tcl).");
 
     phys::Chip c = phys::load_chip(manifest);
 
@@ -62,7 +111,7 @@ int main(int argc, char** argv) {
               << " (runs after add_global_connection rules).\n";
 
     std::cout << "[pdn] add_global_connection: " << c.tech.pg_conn.size()
-              << " rules (stored in Chip; details rarely needed — see pdn Tcl).\n";
+              << " rules (stored in Chip; details rarely needed ??? see pdn Tcl).\n";
 
     std::cout << "[pdn] voltage domains: " << c.tech.vdomains.size() << "\n";
     for (const auto& d : c.tech.vdomains) {
@@ -146,7 +195,7 @@ int main(int argc, char** argv) {
         if (inst.has_cluster && inst.has_sta_power)
           ++joined;
       }
-      std::cout << "[join] power∩cluster: " << joined << " instances"
+      std::cout << "[join] power??�cluster: " << joined << " instances"
                 << " (power coverage by cluster map: "
                 << (100.0 * static_cast<double>(joined) / static_cast<double>(sta_power_cnt))
                 << "%, cluster coverage by power map: "
@@ -301,50 +350,99 @@ int main(int argc, char** argv) {
     ir.estOptions().prefer_sta_current = true;
     ir.estOptions().assumed_cell_area_um2 = inferred_cell_area;
     ir.estOptions().packing_utilization = inferred_pack_util;
+    ir.estOptions().ir_mode
+        = (ir_mode_str == "max") ? phys::IrMode::Max : phys::IrMode::Sum;
+    ir.estOptions().via_r_ohm = via_r_ohm;
     ir.setStrapSheet(
         {mesh_ir.r_sqh, mesh_ir.r_sqv, mesh_ir.w_h_um, mesh_ir.w_v_um});
 
-    ir.buildUniformMesh(mesh_ir.pitch_x_um, mesh_ir.pitch_y_um);
+    phys::PdnDump pdn_dump;
+    if (mesh_mode == "synth") {
+      ir.buildUniformMesh(mesh_ir.pitch_x_um, mesh_ir.pitch_y_um);
+    } else {
+      pdn_dump = phys::load_pdn_dump(pdn_csv);
+      if (pdn_dump.segs.empty())
+        throw std::runtime_error(
+            "pdn dump csv has no segments: " + pdn_csv.string());
+      std::unordered_map<std::string, double> rc_r_per_um;
+      for (const auto& rc : c.tech.rc)
+        rc_r_per_um[rc.layer] = rc.r;
+      if (mesh_mode == "multilayer")
+        ir.buildMultiLayerMesh(pdn_dump, rc_r_per_um, ir.estOptions().vdd_V);
+      else
+        ir.buildMeshFromPdnDump(pdn_dump, rc_r_per_um, ir.estOptions().vdd_V);
+    }
     ir.loadHardMacroCurrents();
     ir.analyzeSoftModules();
     ir.assignMeshLoads();
-    ir.solvePgMeshDc(ir.estOptions().vdd_V);
+    ir.updateMeshVoltages();
 
-    const phys::UniformMesh& mesh = ir.mesh();
     const auto& hard = ir.hardMacros();
     const phys::SoftIrData& soft_data = ir.softData();
 
-    std::cout << "[ir] uniform mesh nodes: " << mesh.nodes.size() << " (" << mesh.nx << "x"
-              << mesh.ny << "), pitch=(" << mesh.pitch_x_um << "," << mesh.pitch_y_um
-              << ") um\n";
-    const phys::StrapSheetModel& strap = ir.strapSheet();
-    std::cout << "[ir] model r_sqh=" << strap.r_sqh << " r_sqv=" << strap.r_sqv
-              << " w_hstrap=" << strap.w_hstrap_um << " w_vstrap=" << strap.w_vstrap_um << " um\n";
+    // Select the right node list for summary / CSV output.
+    const std::vector<phys::MeshNode>& all_nodes =
+        ir.isMultiLayer() ? ir.multiMesh().nodes : ir.mesh().nodes;
+    const std::vector<size_t>& all_ring_nodes =
+        ir.isMultiLayer() ? ir.multiMesh().ring_nodes : ir.mesh().ring_nodes;
+
+    if (ir.isMultiLayer()) {
+      const auto& ml = ir.multiMesh();
+      std::cout << "[ir] multi-layer mesh: " << ml.nodes.size()
+                << " total nodes, " << ml.layers.size() << " layers";
+      for (const auto& li : ml.layers)
+        std::cout << "  " << li.name << "(" << li.nx << "x" << li.ny << ")";
+      std::cout << "  mode=" << mesh_mode
+                << "  ir=" << ir_mode_str
+                << "  via_r=" << via_r_ohm << " ohm\n";
+      std::cout << "[ir] ring/BTERM nodes: " << ml.ring_nodes.size()
+                << "  pin_layer=" << ml.pin_layer
+                << "  soft_layer=" << ml.layers[static_cast<size_t>(ml.soft_layer_idx)].name
+                << "  hard_layer=" << ml.layers[static_cast<size_t>(ml.hard_layer_idx)].name
+                << "\n";
+    } else {
+      const phys::UniformMesh& mesh = ir.mesh();
+      std::cout << "[ir] mesh nodes: " << mesh.nodes.size() << " (" << mesh.nx
+                << "x" << mesh.ny << "), pitch=(" << mesh.pitch_x_um << ","
+                << mesh.pitch_y_um << ") um  mode=" << mesh_mode
+                << "  ir=" << ir_mode_str << "\n";
+      std::cout << "[ir] ring nodes: " << mesh.ring_nodes.size() << "\n";
+      const phys::StrapSheetModel& strap = ir.strapSheet();
+      std::cout << "[ir] model r_sqh=" << strap.r_sqh << " r_sqv=" << strap.r_sqv
+                << " w_hstrap=" << strap.w_hstrap_um
+                << " w_vstrap=" << strap.w_vstrap_um << " um\n";
+    }
     std::cout << "[ir] layers h=" << mesh_ir.layer_h << " v=" << mesh_ir.layer_v
               << " source=" << mesh_ir.source << "\n";
     std::cout << "[ir] inferred VDD=" << ir.estOptions().vdd_V
-              << " V, median cell area=" << ir.estOptions().assumed_cell_area_um2
-              << " um^2, inferred packing util=" << ir.estOptions().packing_utilization << "\n";
+              << " V, median cell area="
+              << ir.estOptions().assumed_cell_area_um2
+              << " um^2, inferred packing util="
+              << ir.estOptions().packing_utilization << "\n";
     {
       double vmin = std::numeric_limits<double>::infinity();
       double vmax = -std::numeric_limits<double>::infinity();
-      for (const auto& n : mesh.nodes) {
+      for (const auto& n : all_nodes) {
         vmin = std::min(vmin, n.v_V);
         vmax = std::max(vmax, n.v_V);
       }
       if (std::isfinite(vmin))
-        std::cout << "[pg] DC mesh solve Gx=i: V_min=" << vmin << " V  V_max=" << vmax
-                  << " V  drop_max=" << (ir.estOptions().vdd_V - vmin) << " V\n";
+        std::cout << "[pg] lumped IR (paper): V_min=" << vmin
+                  << " V  V_max=" << vmax
+                  << " V  drop_max=" << (ir.estOptions().vdd_V - vmin)
+                  << " V\n";
     }
 
     std::filesystem::path out_dir = manifest.parent_path() / "out";
     std::filesystem::create_directories(out_dir);
-    const std::filesystem::path hard_tsv = out_dir / "ir_hard_macros.tsv";
-    const std::filesystem::path soft_tsv = out_dir / "ir_soft_modules.tsv";
-    const std::filesystem::path mesh_tsv = out_dir / "ir_mesh_nodes.tsv";
+    const std::filesystem::path hard_csv = out_dir / "ir_hard_macros.csv";
+    const std::filesystem::path soft_csv = out_dir / "ir_soft_modules.csv";
+    const std::filesystem::path mesh_csv = out_dir / "ir_mesh_nodes.csv";
+    const std::filesystem::path via_csv  = out_dir / "ir_via_connections.csv";
+    const std::filesystem::path stripe_csv = out_dir / "ir_pdn_stripes.csv";
 
     {
-      std::ofstream f(hard_tsv);
+      std::ofstream f(hard_csv);
       f << "instance\tfp_region\tpg_pin_name\tpin_x_um\tpin_y_um\timax_A\tvpin_est_V\n";
       for (const auto& h : hard) {
         const double vj = ir.hardPinVoltage(h.pin_x_um, h.pin_y_um, h.current_A);
@@ -354,7 +452,7 @@ int main(int argc, char** argv) {
     }
 
     {
-      std::ofstream f(soft_tsv);
+      std::ofstream f(soft_csv);
       f << "cluster_id\tcluster_name\tinstance_count\ti_observed_A\ti_worst_box_A\ti_mesh_sum_A\t"
            "vmin_tile_V\n";
       for (const auto& s : soft_data.modules) {
@@ -376,15 +474,53 @@ int main(int argc, char** argv) {
     }
 
     {
-      std::ofstream f(mesh_tsv);
-      f << "ix\tiy\tx_um\ty_um\ti_soft_A\ti_hard_A\ti_total_A\tv_V\n";
-      for (const auto& n : mesh.nodes) {
-        f << n.ix << '\t' << n.iy << '\t' << n.x_um << '\t' << n.y_um << '\t' << n.I_soft_A << '\t'
-          << n.I_hard_A << '\t' << (n.I_soft_A + n.I_hard_A) << '\t' << n.v_V << '\n';
+      std::ofstream f(mesh_csv);
+      f << "layer\tix\tiy\tx_um\ty_um\ti_soft_A\ti_hard_A\ti_total_A\tv_V\tis_vsrc\n";
+      for (const auto& n : all_nodes) {
+        f << n.layer_name << '\t'
+          << n.ix << '\t' << n.iy << '\t' << n.x_um << '\t' << n.y_um << '\t'
+          << n.I_soft_A << '\t' << n.I_hard_A << '\t'
+          << (n.I_soft_A + n.I_hard_A) << '\t' << n.v_V << '\t'
+          << (n.is_ring ? 1 : 0) << '\n';
       }
     }
 
-    std::cout << "[hard] pin_rows=" << hard.size() << "  output=" << hard_tsv << "\n";
+    // Via connections: emit inter-layer edges from the multi-layer adjacency list.
+    {
+      std::ofstream f(via_csv);
+      f << "node_a\tlayer_a\tx_a_um\ty_a_um\tnode_b\tlayer_b\tx_b_um\ty_b_um\tg_siemens\n";
+      size_t via_count = 0;
+      if (ir.isMultiLayer()) {
+        const auto& ml = ir.multiMesh();
+        for (size_t i = 0; i < ml.adj.size(); ++i) {
+          for (const auto& [j, g] : ml.adj[i]) {
+            if (j <= i) continue;  // emit each edge once
+            if (ml.nodes[i].layer_idx == ml.nodes[j].layer_idx) continue;
+            f << i << '\t' << ml.nodes[i].layer_name << '\t'
+              << ml.nodes[i].x_um << '\t' << ml.nodes[i].y_um << '\t'
+              << j << '\t' << ml.nodes[j].layer_name << '\t'
+              << ml.nodes[j].x_um << '\t' << ml.nodes[j].y_um << '\t'
+              << g << '\n';
+            ++via_count;
+          }
+        }
+      }
+      std::cout << "[via] via_connections=" << via_count << "  output=" << via_csv << "\n";
+    }
+
+    // PDN stripes: copy loaded PDN dump segments to the output directory.
+    {
+      std::ofstream f(stripe_csv);
+      f << "kind\tlayer\txlo_um\tylo_um\txhi_um\tyhi_um\n";
+      for (const auto& s : pdn_dump.segs) {
+        f << s.kind << '\t' << s.layer << '\t'
+          << s.xlo << '\t' << s.ylo << '\t' << s.xhi << '\t' << s.yhi << '\n';
+      }
+      std::cout << "[pdn] stripe_segments=" << pdn_dump.segs.size()
+                << "  output=" << stripe_csv << "\n";
+    }
+
+    std::cout << "[hard] pin_rows=" << hard.size() << "  output=" << hard_csv << "\n";
 
     std::map<std::string, std::vector<const phys::HardMacroCurrent*>> pins_by_instance;
     for (const auto& h : hard)
@@ -431,8 +567,8 @@ int main(int argc, char** argv) {
       std::cout << std::defaultfloat << std::setprecision(6);
     }
 
-    std::cout << "[soft] count=" << soft_data.modules.size() << "  output=" << soft_tsv << "\n";
-    std::cout << "[mesh] nodes=" << mesh.nodes.size() << "  output=" << mesh_tsv << "\n";
+    std::cout << "[soft] count=" << soft_data.modules.size() << "  output=" << soft_csv << "\n";
+    std::cout << "[mesh] nodes=" << all_nodes.size() << "  output=" << mesh_csv << "\n";
     if (!hard.empty()) {
       const auto& h = hard.front();
       const double vj = ir.hardPinVoltage(h.pin_x_um, h.pin_y_um, h.current_A);

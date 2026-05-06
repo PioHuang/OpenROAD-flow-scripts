@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>phys_load IR 3D PDN viewer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f6f7f9; color: #1f2328; }
+  #app { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: auto 1fr;
+         height: 100vh; }
+  header { grid-column: 1 / 3; padding: 10px 16px; background: #ffffff;
+           border-bottom: 1px solid #d0d7de; display: flex; align-items: center;
+           gap: 16px; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .meta { font-size: 12px; color: #57606a; }
+  aside { padding: 14px; background: #ffffff; border-right: 1px solid #d0d7de;
+          overflow: auto; }
+  aside h2 { font-size: 12px; text-transform: uppercase; color: #57606a;
+             margin: 0 0 6px; letter-spacing: 0.04em; font-weight: 600; }
+  aside section { margin-bottom: 18px; }
+  aside label { display: block; font-size: 13px; margin: 4px 0; cursor: pointer; }
+  aside select, aside input[type=range] { width: 100%; }
+  .stat { display: flex; justify-content: space-between; font-size: 13px;
+          padding: 2px 0; border-bottom: 1px dashed #eaeef2; }
+  .stat b { font-weight: 600; }
+  main { position: relative; }
+  #plot { position: absolute; inset: 0; }
+  button { font: inherit; padding: 6px 10px; border: 1px solid #d0d7de;
+           background: #f6f8fa; border-radius: 6px; cursor: pointer; }
+  button:hover { background: #eaeef2; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .layer-color { display: inline-block; width: 12px; height: 12px;
+                 border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="design-title">phys_load IR 3D PDN viewer</h1>
+    <span class="meta" id="design-meta"></span>
+    <span style="flex:1"></span>
+    <button id="btn-png">Download PNG</button>
+  </header>
+  <aside>
+    <section>
+      <h2>Summary</h2>
+      <div class="stat"><span>Design</span><b id="s-design">-</b></div>
+      <div class="stat"><span>VDD (V)</span><b id="s-vdd">-</b></div>
+      <div class="stat"><span>V_min (V)</span><b id="s-vmin">-</b></div>
+      <div class="stat"><span>V_max (V)</span><b id="s-vmax">-</b></div>
+      <div class="stat"><span>drop_max (mV)</span><b id="s-drop">-</b></div>
+      <div class="stat"><span>Layers</span><b id="s-layers">-</b></div>
+      <div class="stat"><span>V-sources</span><b id="s-vsrc">-</b></div>
+      <div class="stat"><span>Via connections</span><b id="s-vias">-</b></div>
+      <div class="stat"><span>PDN stripes</span><b id="s-stripes">-</b></div>
+    </section>
+
+    <section>
+      <h2>Mesh field</h2>
+      <label><input type="radio" name="field" value="v" checked> Voltage (V)</label>
+      <label><input type="radio" name="field" value="drop"> IR drop (mV)</label>
+      <label><input type="radio" name="field" value="i_total"> Current total (A)</label>
+      <label><input type="radio" name="field" value="i_hard"> Current hard (A)</label>
+      <label><input type="radio" name="field" value="i_soft"> Current soft (A)</label>
+    </section>
+
+    <section>
+      <h2>Colormap</h2>
+      <select id="cmap">
+        <option value="Turbo" selected>Turbo</option>
+        <option value="Viridis">Viridis</option>
+        <option value="Plasma">Plasma</option>
+        <option value="Inferno">Inferno</option>
+        <option value="Magma">Magma</option>
+        <option value="RdYlGn">RdYlGn</option>
+        <option value="Cividis">Cividis</option>
+        <option value="Hot">Hot</option>
+      </select>
+      <label><input type="checkbox" id="reverse-cmap"> reverse scale</label>
+    </section>
+
+    <section>
+      <h2>Layer visibility</h2>
+      <div id="layer-toggles"></div>
+    </section>
+
+    <section>
+      <h2>Overlays</h2>
+      <label><input type="checkbox" id="show-vsrc" checked> Voltage sources</label>
+      <label><input type="checkbox" id="show-vias" checked> Via connections</label>
+      <label><input type="checkbox" id="show-stripes"> PDN stripes</label>
+      <label><input type="checkbox" id="show-hard" checked> Hard macro PG pins</label>
+      <label><input type="checkbox" id="show-core" checked> Core rectangle</label>
+      <label><input type="checkbox" id="show-die"> Die rectangle</label>
+    </section>
+
+    <section>
+      <h2>Surface opacity</h2>
+      <div class="row">
+        <input type="range" id="opacity-slider" min="10" max="100" value="80">
+        <span id="opacity-val" style="font-size:12px; min-width:36px; text-align:right">0.80</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Z spacing</h2>
+      <div class="row">
+        <input type="range" id="z-spacing" min="10" max="200" value="50">
+        <span id="z-spacing-val" style="font-size:12px; min-width:36px; text-align:right">50</span>
+      </div>
+    </section>
+  </aside>
+  <main><div id="plot"></div></main>
+</div>
+
+<script>
+const DATA = /*__IR_DATA_JSON__*/ null;
+
+(function () {
+  if (!DATA) {
+    document.getElementById("plot").innerHTML =
+      "<p style='padding:24px'>No data embedded. Regenerate with pack_viewer.py --mode 3d.</p>";
+    return;
+  }
+
+  const fmtNum = (x, d = 4) => (x === null || !isFinite(x)) ? "-" : Number(x).toFixed(d);
+
+  const LAYER_COLORS = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+  ];
+
+  const layerNames = DATA.layer_names || [];
+  const layerZBase = DATA.layer_z_map || {};
+  let zScale = 50;
+
+  function layerZ(name) {
+    const baseIdx = layerNames.indexOf(name);
+    return baseIdx >= 0 ? baseIdx * zScale : 0;
+  }
+
+  function layerColor(name) {
+    const idx = layerNames.indexOf(name);
+    return LAYER_COLORS[idx % LAYER_COLORS.length];
+  }
+
+  // Build layer toggle checkboxes
+  const toggleContainer = document.getElementById("layer-toggles");
+  const layerVisible = {};
+  layerNames.forEach((ln, i) => {
+    layerVisible[ln] = true;
+    const lbl = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.dataset.layer = ln;
+    cb.addEventListener("change", render);
+    const swatch = document.createElement("span");
+    swatch.className = "layer-color";
+    swatch.style.background = LAYER_COLORS[i % LAYER_COLORS.length];
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(" "));
+    lbl.appendChild(swatch);
+    lbl.appendChild(document.createTextNode(" " + ln));
+    toggleContainer.appendChild(lbl);
+  });
+
+  // Compute global V range across all layers
+  let gVmin = +Infinity, gVmax = -Infinity;
+  for (const ln of layerNames) {
+    const ml = DATA.mesh_layers[ln];
+    if (!ml) continue;
+    for (const row of ml.v) {
+      for (const val of row) {
+        if (val !== null && isFinite(val)) {
+          gVmin = Math.min(gVmin, val);
+          gVmax = Math.max(gVmax, val);
+        }
+      }
+    }
+  }
+
+  // Summary panel
+  document.getElementById("design-title").textContent = DATA.design + " - 3D PDN viewer";
+  document.getElementById("design-meta").textContent =
+    "core " + DATA.core.map(v => v.toFixed(0)).join(", ") + " um";
+  document.getElementById("s-design").textContent = DATA.design;
+  document.getElementById("s-vdd").textContent = fmtNum(DATA.vdd, 4);
+  document.getElementById("s-vmin").textContent = fmtNum(gVmin, 4);
+  document.getElementById("s-vmax").textContent = fmtNum(gVmax, 4);
+  document.getElementById("s-drop").textContent = fmtNum((DATA.vdd - gVmin) * 1000.0, 2);
+  document.getElementById("s-layers").textContent = layerNames.join(", ");
+  document.getElementById("s-vsrc").textContent = (DATA.vsrc_nodes || []).length;
+  document.getElementById("s-vias").textContent = (DATA.via_connections || []).length;
+  document.getElementById("s-stripes").textContent = (DATA.pdn_stripes || []).length;
+
+  function currentField() {
+    const r = document.querySelector('input[name="field"]:checked');
+    return r ? r.value : "v";
+  }
+
+  function getVisibleLayers() {
+    const vis = {};
+    document.querySelectorAll("#layer-toggles input[type=checkbox]").forEach(cb => {
+      vis[cb.dataset.layer] = cb.checked;
+    });
+    return vis;
+  }
+
+  function fieldData(ml, fieldKey) {
+    if (fieldKey === "v") return { z: ml.v, label: "voltage (V)" };
+    if (fieldKey === "drop") {
+      const d = ml.v.map(row => row.map(v => (v !== null && isFinite(v)) ? (DATA.vdd - v) * 1000.0 : null));
+      return { z: d, label: "IR drop (mV)" };
+    }
+    if (fieldKey === "i_total") return { z: ml.i_total, label: "current total (A)" };
+    if (fieldKey === "i_hard") return { z: ml.i_hard, label: "current hard (A)" };
+    if (fieldKey === "i_soft") return { z: ml.i_soft, label: "current soft (A)" };
+    return { z: ml.v, label: "voltage (V)" };
+  }
+
+  function buildTraces() {
+    const fieldKey = currentField();
+    const cmap = document.getElementById("cmap").value;
+    const reverse = document.getElementById("reverse-cmap").checked;
+    const opacity = parseFloat(document.getElementById("opacity-slider").value) / 100.0;
+    const vis = getVisibleLayers();
+
+    let useReverse = reverse;
+    if (fieldKey === "v") useReverse = !reverse;
+
+    // Compute global field range for shared colorscale
+    let fieldMin = +Infinity, fieldMax = -Infinity;
+    for (const ln of layerNames) {
+      if (!vis[ln]) continue;
+      const ml = DATA.mesh_layers[ln];
+      if (!ml) continue;
+      const fd = fieldData(ml, fieldKey);
+      for (const row of fd.z) {
+        for (const val of row) {
+          if (val !== null && isFinite(val)) {
+            fieldMin = Math.min(fieldMin, val);
+            fieldMax = Math.max(fieldMax, val);
+          }
+        }
+      }
+    }
+
+    const traces = [];
+
+    // Layer surfaces
+    for (const ln of layerNames) {
+      if (!vis[ln]) continue;
+      const ml = DATA.mesh_layers[ln];
+      if (!ml) continue;
+      const fd = fieldData(ml, fieldKey);
+      const z3d = layerZ(ln);
+
+      const surfZ = [];
+      const surfColor = [];
+      const hoverText = [];
+      for (let iy = 0; iy < ml.ny; iy++) {
+        const zRow = [];
+        const cRow = [];
+        const hRow = [];
+        for (let ix = 0; ix < ml.nx; ix++) {
+          zRow.push(z3d);
+          const val = fd.z[iy][ix];
+          cRow.push(val);
+          const vv = ml.v[iy] ? ml.v[iy][ix] : null;
+          const dropMv = (vv !== null && isFinite(vv)) ? ((DATA.vdd - vv) * 1000.0).toFixed(2) : "-";
+          hRow.push(
+            `${ln} [${ix},${iy}]<br>` +
+            `x=${ml.x[ix] != null ? ml.x[ix].toFixed(1) : "?"}, ` +
+            `y=${ml.y[iy] != null ? ml.y[iy].toFixed(1) : "?"} um<br>` +
+            `V=${vv != null ? vv.toFixed(4) : "-"} (drop=${dropMv} mV)<br>` +
+            `field=${val != null ? val.toPrecision(4) : "-"}`
+          );
+        }
+        surfZ.push(zRow);
+        surfColor.push(cRow);
+        hoverText.push(hRow);
+      }
+
+      traces.push({
+        type: "surface",
+        x: ml.x,
+        y: ml.y,
+        z: surfZ,
+        surfacecolor: surfColor,
+        colorscale: cmap,
+        reversescale: useReverse,
+        cmin: fieldMin,
+        cmax: fieldMax,
+        opacity: opacity,
+        showscale: (ln === layerNames[layerNames.length - 1]),
+        colorbar: (ln === layerNames[layerNames.length - 1])
+          ? { title: fd.label, thickness: 14, len: 0.6, y: 0.5 } : undefined,
+        text: hoverText,
+        hoverinfo: "text",
+        name: ln,
+        showlegend: true,
+      });
+    }
+
+    // Voltage source markers
+    if (document.getElementById("show-vsrc").checked && DATA.vsrc_nodes && DATA.vsrc_nodes.length > 0) {
+      const vsrc = DATA.vsrc_nodes.filter(v => vis[v.layer] !== false);
+      if (vsrc.length > 0) {
+        traces.push({
+          type: "scatter3d",
+          mode: "markers",
+          x: vsrc.map(v => v.x_um),
+          y: vsrc.map(v => v.y_um),
+          z: vsrc.map(v => layerZ(v.layer)),
+          marker: {
+            size: 5,
+            symbol: "diamond",
+            color: "#e03030",
+            line: { color: "black", width: 0.5 },
+          },
+          text: vsrc.map(v => `V-source ${v.layer}<br>(${v.x_um?.toFixed(1)}, ${v.y_um?.toFixed(1)}) um<br>V=${v.v_V?.toFixed(4)} V`),
+          hoverinfo: "text",
+          name: "V-sources",
+          showlegend: true,
+        });
+      }
+    }
+
+    // Via connections as vertical lines
+    if (document.getElementById("show-vias").checked && DATA.via_connections && DATA.via_connections.length > 0) {
+      const viaX = [], viaY = [], viaZ = [];
+      let viaCount = 0;
+      for (const vc of DATA.via_connections) {
+        if (vis[vc.layer_a] === false && vis[vc.layer_b] === false) continue;
+        viaX.push(vc.x_a_um, vc.x_b_um, null);
+        viaY.push(vc.y_a_um, vc.y_b_um, null);
+        viaZ.push(layerZ(vc.layer_a), layerZ(vc.layer_b), null);
+        viaCount++;
+      }
+      if (viaCount > 0) {
+        traces.push({
+          type: "scatter3d",
+          mode: "lines",
+          x: viaX,
+          y: viaY,
+          z: viaZ,
+          line: { color: "#6e40aa", width: 2 },
+          hoverinfo: "skip",
+          name: `Vias (${viaCount})`,
+          showlegend: true,
+        });
+      }
+    }
+
+    // PDN stripes as 3D lines (rectangle outlines)
+    if (document.getElementById("show-stripes").checked && DATA.pdn_stripes && DATA.pdn_stripes.length > 0) {
+      const stripesByLayer = {};
+      for (const s of DATA.pdn_stripes) {
+        if (!stripesByLayer[s.layer]) stripesByLayer[s.layer] = [];
+        stripesByLayer[s.layer].push(s);
+      }
+      for (const sLayer of Object.keys(stripesByLayer)) {
+        if (vis[sLayer] === false) continue;
+        const segs = stripesByLayer[sLayer];
+        const sx = [], sy = [], sz = [];
+        const zz = layerZ(sLayer);
+        for (const s of segs) {
+          sx.push(s.xlo, s.xhi, s.xhi, s.xlo, s.xlo, null);
+          sy.push(s.ylo, s.ylo, s.yhi, s.yhi, s.ylo, null);
+          sz.push(zz, zz, zz, zz, zz, null);
+        }
+        traces.push({
+          type: "scatter3d",
+          mode: "lines",
+          x: sx, y: sy, z: sz,
+          line: { color: layerColor(sLayer), width: 1.5 },
+          hoverinfo: "skip",
+          name: `Stripes ${sLayer} (${segs.length})`,
+          showlegend: true,
+          opacity: 0.6,
+        });
+      }
+    }
+
+    // Hard macro PG pins
+    if (document.getElementById("show-hard").checked && DATA.hard && DATA.hard.length > 0) {
+      const hardLayer = layerNames.length > 1 ? layerNames[1] : layerNames[0] || "";
+      const hardFiltered = vis[hardLayer] !== false ? DATA.hard : [];
+      if (hardFiltered.length > 0) {
+        const iMax = Math.max(...hardFiltered.map(h => h.imax_A || 0), 1e-30);
+        traces.push({
+          type: "scatter3d",
+          mode: "markers",
+          x: hardFiltered.map(h => h.pin_x_um),
+          y: hardFiltered.map(h => h.pin_y_um),
+          z: hardFiltered.map(() => layerZ(hardLayer)),
+          marker: {
+            size: hardFiltered.map(h => 3 + 8 * ((h.imax_A || 0) / iMax)),
+            color: hardFiltered.map(h => h.vpin_est_V),
+            colorscale: cmap,
+            reversescale: useReverse,
+            cmin: gVmin,
+            cmax: gVmax,
+            line: { color: "black", width: 0.4 },
+            showscale: false,
+          },
+          text: hardFiltered.map(h =>
+            `${h.instance}<br>pg=${h.pg_pin_name}<br>` +
+            `(${h.pin_x_um?.toFixed(1)}, ${h.pin_y_um?.toFixed(1)}) um<br>` +
+            `I=${h.imax_A?.toFixed(5)} A  V~=${h.vpin_est_V?.toFixed(4)} V`
+          ),
+          hoverinfo: "text",
+          name: "Hard PG pins",
+          showlegend: true,
+        });
+      }
+    }
+
+    return traces;
+  }
+
+  function buildShapes3D() {
+    const annotations = [];
+    const zBottom = 0;
+    const showCore = document.getElementById("show-core").checked;
+    const showDie = document.getElementById("show-die").checked;
+
+    // Core and die rectangles rendered as scatter3d line traces (returned as extra traces)
+    const extra = [];
+    if (showCore) {
+      const c = DATA.core;
+      extra.push({
+        type: "scatter3d",
+        mode: "lines",
+        x: [c[0], c[2], c[2], c[0], c[0]],
+        y: [c[1], c[1], c[3], c[3], c[1]],
+        z: [zBottom, zBottom, zBottom, zBottom, zBottom],
+        line: { color: "black", width: 3 },
+        hoverinfo: "skip",
+        name: "Core",
+        showlegend: true,
+      });
+    }
+    if (showDie && DATA.die) {
+      const d = DATA.die;
+      extra.push({
+        type: "scatter3d",
+        mode: "lines",
+        x: [d[0], d[2], d[2], d[0], d[0]],
+        y: [d[1], d[1], d[3], d[3], d[1]],
+        z: [zBottom, zBottom, zBottom, zBottom, zBottom],
+        line: { color: "gray", width: 2, dash: "dot" },
+        hoverinfo: "skip",
+        name: "Die",
+        showlegend: true,
+      });
+    }
+    return extra;
+  }
+
+  function render() {
+    // Update z-spacing
+    zScale = parseInt(document.getElementById("z-spacing").value) || 50;
+    document.getElementById("z-spacing-val").textContent = zScale;
+    document.getElementById("opacity-val").textContent =
+      (parseFloat(document.getElementById("opacity-slider").value) / 100.0).toFixed(2);
+
+    const traces = [...buildTraces(), ...buildShapes3D()];
+
+    const xRange = [DATA.core[0] - 20, DATA.core[2] + 20];
+    const yRange = [DATA.core[1] - 20, DATA.core[3] + 20];
+    const zMax = Math.max(...layerNames.map(ln => layerZ(ln)), 10) + 20;
+
+    const layout = {
+      margin: { l: 0, r: 0, t: 0, b: 0 },
+      scene: {
+        xaxis: { title: "x (um)", range: xRange },
+        yaxis: { title: "y (um)", range: yRange },
+        zaxis: { title: "layer (z)", range: [-10, zMax],
+                 tickvals: layerNames.map(ln => layerZ(ln)),
+                 ticktext: layerNames },
+        aspectmode: "manual",
+        aspectratio: {
+          x: (DATA.core[2] - DATA.core[0]) / Math.max(DATA.core[2] - DATA.core[0], DATA.core[3] - DATA.core[1], 1),
+          y: (DATA.core[3] - DATA.core[1]) / Math.max(DATA.core[2] - DATA.core[0], DATA.core[3] - DATA.core[1], 1),
+          z: 0.4,
+        },
+        camera: {
+          eye: { x: 1.5, y: -1.5, z: 1.2 },
+          up: { x: 0, y: 0, z: 1 },
+        },
+      },
+      legend: { x: 0.01, y: 0.99, bgcolor: "rgba(255,255,255,0.85)",
+                font: { size: 11 } },
+      paper_bgcolor: "#f6f7f9",
+    };
+
+    Plotly.react("plot", traces, layout, { responsive: true, displaylogo: false });
+  }
+
+  // Event listeners
+  document.querySelectorAll('input[name="field"]').forEach(el => el.addEventListener("change", render));
+  document.getElementById("cmap").addEventListener("change", render);
+  document.getElementById("reverse-cmap").addEventListener("change", render);
+  document.getElementById("show-vsrc").addEventListener("change", render);
+  document.getElementById("show-vias").addEventListener("change", render);
+  document.getElementById("show-stripes").addEventListener("change", render);
+  document.getElementById("show-hard").addEventListener("change", render);
+  document.getElementById("show-core").addEventListener("change", render);
+  document.getElementById("show-die").addEventListener("change", render);
+  document.getElementById("opacity-slider").addEventListener("input", render);
+  document.getElementById("z-spacing").addEventListener("input", render);
+
+  document.getElementById("btn-png").addEventListener("click", () => {
+    Plotly.downloadImage("plot", { format: "png", width: 1600, height: 1200,
+                                    filename: DATA.design + "_ir_3d_" + currentField() });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 #include <phys/chip.hpp>
+#include <phys/pdn_ir.hpp>
 
 #include <cctype>
 #include <fstream>
@@ -755,6 +756,59 @@ Chip load_chip(const std::filesystem::path& manifest_path) {
   }
 
   return chip;
+}
+
+PdnDump load_pdn_dump(const std::filesystem::path& csv) {
+  std::ifstream in(csv);
+  if (!in)
+    throw std::runtime_error("cannot read pdn dump: " + csv.string());
+
+  PdnDump out;
+  std::string line;
+  bool first = true;
+  while (std::getline(in, line)) {
+    if (line.empty())
+      continue;
+    if (first) {
+      first = false;
+      const bool looks_like_header
+          = (line.find("kind") != std::string::npos
+             && line.find("layer") != std::string::npos);
+      if (looks_like_header)
+        continue;
+    }
+    if (line[0] == '#')
+      continue;
+
+    std::vector<std::string> cols;
+    cols.reserve(6);
+    std::string tok;
+    for (char c : line) {
+      if (c == '\t') {
+        cols.push_back(std::move(tok));
+        tok.clear();
+      } else {
+        tok.push_back(c);
+      }
+    }
+    cols.push_back(std::move(tok));
+    if (cols.size() < 6)
+      continue;
+
+    PdnSegment s;
+    s.kind = cols[0];
+    s.layer = cols[1];
+    try {
+      s.xlo = std::stod(cols[2]);
+      s.ylo = std::stod(cols[3]);
+      s.xhi = std::stod(cols[4]);
+      s.yhi = std::stod(cols[5]);
+    } catch (const std::exception&) {
+      continue;
+    }
+    out.segs.push_back(std::move(s));
+  }
+  return out;
 }
 
 }  // namespace phys

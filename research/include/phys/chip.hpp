@@ -125,9 +125,9 @@ class InstPower {
   bool has_current{};
 };
 
-/// One POWER/GROUND attachment point on a block instance (from instance_geom.tsv / ODB).
+/// One POWER/GROUND attachment point on a block instance (from instance_geom.csv / ODB).
 struct MacroPgPin {
-  std::string name;  ///< MTerm name (e.g. VDD); may be empty if column absent in TSV
+  std::string name;  ///< MTerm name (e.g. VDD); may be empty if column absent in CSV
   double x_um{};
   double y_um{};
 };
@@ -158,7 +158,7 @@ class Instance {
   InstPower sta_power;
 };
 
-// RTLMP root.fp.txt: one rect per line (name x y w h in DBU) — same as report.py
+// RTLMP root.fp.txt: one rect per line (name x y w h in DBU) ??? same as report.py
 class FpBox {
  public:
   std::string name;
