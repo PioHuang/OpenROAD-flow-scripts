@@ -8,6 +8,7 @@ set -euo pipefail
 # Examples:
 #   bash research/scripts/run.sh
 #   bash research/scripts/run.sh --design black_parrot --manifest research/black_parrot.json
+# Post-PDN DEF for 1142PDN (optional): bash research/scripts/export_pdn_def_for_1142pdn.sh → 1142PDN/out/<design>_pdn.def
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -18,6 +19,7 @@ DESIGN="mempool_group"
 BASE_VARIANT="base"
 MANIFEST="research/mempool.json"
 START_STAGE="1"
+STOP_STAGE="8"
 USE_RTLMP_SOFT_GUIDANCE=0
 SOFT_GUIDANCE_WEIGHT="0.6"
 SOFT_GUIDANCE_STAGE="gp"
@@ -44,19 +46,22 @@ while [[ $# -gt 0 ]]; do
     --base-variant) BASE_VARIANT="$2"; shift 2 ;;
     --manifest) MANIFEST="$2"; shift 2 ;;
     --start-stage) START_STAGE="$2"; shift 2 ;;
+    --stop-stage) STOP_STAGE="$2"; shift 2 ;;
     --use-rtlmp-soft-guidance) USE_RTLMP_SOFT_GUIDANCE=1; shift 1 ;;
     --soft-guidance-weight) SOFT_GUIDANCE_WEIGHT="$2"; shift 2 ;;
     --soft-guidance-stage) SOFT_GUIDANCE_STAGE="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: $0 [--platform P] [--design D] [--base-variant B] [--manifest path] [--start-stage S]"
+      echo "Usage: $0 [--platform P] [--design D] [--base-variant B] [--manifest path] [--start-stage S] [--stop-stage S]"
       echo "  --design: directory name under flow/designs/<platform>/ (e.g. black_parrot)."
       echo "  ORFS results/reports/objects use DESIGN_NICKNAME from that config.mk (e.g. bp), not DESIGN_NAME."
       echo "  All flow steps use FLOW_VARIANT=\${BASE_VARIANT} (default: base) only."
       echo "  --start-stage: stage number/name to resume from."
+      echo "  --stop-stage: stage number/name to stop after (default: verify / 8)."
       echo "    1:synth 2:checkpoints 3:rtlmp 4:floorplan_place 5:placement_viz 6:reports(extract) 7:normalize 8:verify"
       echo "  --use-rtlmp-soft-guidance: generate GPL soft guidance from RTLMP reports and pass to do-place."
       echo "  --soft-guidance-weight: weight passed to global_placement -soft_guidance_weight (default: 0.6)."
       echo "  --soft-guidance-stage: where to apply guidance: skip_io|gp|both (default: skip_io)."
+      echo "  Post-PDN DEF for 1142PDN: research/scripts/export_pdn_def_for_1142pdn.sh → 1142PDN/out/<design>_pdn.def"
       exit 0
       ;;
     *)
@@ -69,6 +74,15 @@ done
 if ! START_STAGE_NUM="$(stage_to_num "${START_STAGE}")"; then
   echo "ERROR: invalid --start-stage '${START_STAGE}'" >&2
   echo "Valid values: 1..8 or synth/checkpoints/rtlmp/floorplan_place/placement_viz/reports/extract/normalize/verify" >&2
+  exit 2
+fi
+if ! STOP_STAGE_NUM="$(stage_to_num "${STOP_STAGE}")"; then
+  echo "ERROR: invalid --stop-stage '${STOP_STAGE}'" >&2
+  echo "Valid values: 1..8 or synth/checkpoints/rtlmp/floorplan_place/placement_viz/reports/extract/normalize/verify" >&2
+  exit 2
+fi
+if (( START_STAGE_NUM > STOP_STAGE_NUM )); then
+  echo "ERROR: --start-stage (${START_STAGE}) must be <= --stop-stage (${STOP_STAGE})" >&2
   exit 2
 fi
 
@@ -112,24 +126,25 @@ fi
 
 echo "[design] platform=${PLATFORM} design_dir=${DESIGN} design_nickname=${DESIGN_NICKNAME} variant=${BASE_VARIANT}"
 echo "[resume] start-stage=${START_STAGE} (resolved=${START_STAGE_NUM})"
+echo "[stop] stop-stage=${STOP_STAGE} (resolved=${STOP_STAGE_NUM})"
 
 cd "${FLOW_DIR}"
-if (( START_STAGE_NUM <= 1 )); then
+if (( START_STAGE_NUM <= 1 && STOP_STAGE_NUM >= 1 )); then
   echo "[1/8] Start from synthesis (traditional ORFS entry)"
   make DESIGN_CONFIG="${DESIGN_CFG}" FLOW_VARIANT="${BASE_VARIANT}" do-1_synth
 else
-  echo "[1/8] Skipped (start-stage=${START_STAGE})"
+  echo "[1/8] Skipped (outside requested stage range)"
 fi
 
-if (( START_STAGE_NUM <= 2 )); then
+if (( START_STAGE_NUM <= 2 && STOP_STAGE_NUM >= 2 )); then
   echo "[2/8] Floorplan checkpoints"
   make DESIGN_CONFIG="${DESIGN_CFG}" FLOW_VARIANT="${BASE_VARIANT}" do-2_1_floorplan
   make DESIGN_CONFIG="${DESIGN_CFG}" FLOW_VARIANT="${BASE_VARIANT}" do-2_2_floorplan_macro
 else
-  echo "[2/8] Skipped (start-stage=${START_STAGE})"
+  echo "[2/8] Skipped (outside requested stage range)"
 fi
 
-if (( START_STAGE_NUM <= 3 )); then
+if (( START_STAGE_NUM <= 3 && STOP_STAGE_NUM >= 3 )); then
   echo "[3/8] RTLMP extraction and cluster reports"
   if [[ -f "${DESIGN_DIR}/rtlmp_extract.tcl" ]]; then
     # Keep this non-interactive; some Tcl scripts end without `exit` and would leave
@@ -181,10 +196,10 @@ if (( START_STAGE_NUM <= 3 )); then
     fi
   fi
 else
-  echo "[3/8] Skipped (start-stage=${START_STAGE})"
+  echo "[3/8] Skipped (outside requested stage range)"
 fi
 
-if (( START_STAGE_NUM <= 4 )); then
+if (( START_STAGE_NUM <= 4 && STOP_STAGE_NUM >= 4 )); then
   echo "[4/8] Finish floorplan + placement (${BASE_VARIANT})"
   make DESIGN_CONFIG="${DESIGN_CFG}" FLOW_VARIANT="${BASE_VARIANT}" do-2_3_floorplan_tapcell
   make DESIGN_CONFIG="${DESIGN_CFG}" FLOW_VARIANT="${BASE_VARIANT}" do-2_4_floorplan_pdn
@@ -238,10 +253,10 @@ if (( START_STAGE_NUM <= 4 )); then
     make DESIGN_CONFIG="${DESIGN_CFG}" FLOW_VARIANT="${BASE_VARIANT}" do-place
   fi
 else
-  echo "[4/8] Skipped (start-stage=${START_STAGE})"
+  echo "[4/8] Skipped (outside requested stage range)"
 fi
 
-if (( START_STAGE_NUM <= 5 )); then
+if (( START_STAGE_NUM <= 5 && STOP_STAGE_NUM >= 5 )); then
   echo "[5/8] Placement visualization"
   if [[ -f "${DESIGN_DIR}/placepng.py" && -f "${RESULT_DIR}/3_place.odb" ]]; then
     membership_path="${REPORT_DIR}/rtlmp_cluster_membership.txt"
@@ -260,10 +275,10 @@ if (( START_STAGE_NUM <= 5 )); then
     echo "WARN: placepng.py or place ODB missing; skipping placement image."
   fi
 else
-  echo "[5/8] Skipped (start-stage=${START_STAGE})"
+  echo "[5/8] Skipped (outside requested stage range)"
 fi
 
-if (( START_STAGE_NUM <= 6 )); then
+if (( START_STAGE_NUM <= 6 && STOP_STAGE_NUM >= 6 )); then
   echo "[6/8] Generate research-required reports and DB extracts"
   if [[ -f "${DESIGN_DIR}/report_power.tcl" ]]; then
     make run DESIGN_CONFIG="${DESIGN_CFG}" FLOW_VARIANT="${BASE_VARIANT}" \
@@ -295,10 +310,10 @@ if (( START_STAGE_NUM <= 6 )); then
   python3 "${REPO_ROOT}/research/scripts/generate_pdn_tcl_physical.py" \
     "${REPO_ROOT}/${MANIFEST}"
 else
-  echo "[6/8] Skipped (start-stage=${START_STAGE})"
+  echo "[6/8] Skipped (outside requested stage range)"
 fi
 
-if (( START_STAGE_NUM <= 7 )); then
+if (( START_STAGE_NUM <= 7 && STOP_STAGE_NUM >= 7 )); then
   echo "[7/8] Normalize membership filename expected by research JSON"
   if [[ -f "${REPORT_DIR}/rtlmp_instance_to_cluster.txt" ]]; then
     :
@@ -309,10 +324,10 @@ if (( START_STAGE_NUM <= 7 )); then
     echo "WARN: missing both rtlmp_instance_to_cluster.txt and rtlmp_cluster_membership.txt"
   fi
 else
-  echo "[7/8] Skipped (start-stage=${START_STAGE})"
+  echo "[7/8] Skipped (outside requested stage range)"
 fi
 
-if (( START_STAGE_NUM <= 8 )); then
+if (( START_STAGE_NUM <= 8 && STOP_STAGE_NUM >= 8 )); then
   echo "[8/8] Verify files referenced by manifest (${MANIFEST})"
   manifest_abs="${REPO_ROOT}/${MANIFEST}"
   if [[ ! -f "${manifest_abs}" ]]; then
@@ -353,7 +368,7 @@ PY
   done
   [[ "${missing}" -eq 0 ]] || exit 1
 else
-  echo "[8/8] Skipped (start-stage=${START_STAGE})"
+  echo "[8/8] Skipped (outside requested stage range)"
 fi
 
 echo "Done. Flow artifacts are ready for: ./research/build/phys_load ${MANIFEST}"

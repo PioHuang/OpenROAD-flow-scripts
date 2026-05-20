@@ -1,0 +1,30 @@
+{
+  "name": "mempool_group",
+  "orfs_root": "../..",
+  "layout": {
+    "core": [10, 12, 1090, 1090]
+  },
+  "tech": {
+    "set_rc_tcl": "flow/platforms/nangate45/setRC.tcl",
+    "pdn_tcl": "flow/designs/nangate45/mempool_group/pdn.tcl"
+  },
+  "vsrc_loc": "flow/designs/nangate45/mempool_group/vsrc.loc",
+  "pdn_geometry": {
+    "odb": "flow/results/nangate45/mempool_group/base/2_4_floorplan_pdn.odb",
+    "def": "1142PDN/out/mempool_group_pdn.def",
+    "power_nets": ["VDD"],
+    "vias_tsv": "flow/reports/nangate45/mempool_group/base/pdn_vias_VDD.tsv",
+    "wires_tsv": "flow/reports/nangate45/mempool_group/base/pdn_wires_VDD.tsv"
+  },
+  "report_power_instances_tsv": "flow/reports/nangate45/mempool_group/base/report_power_instances.tsv",
+  "instance_geom_tsv": "research/out/floorplan_db_extract/db_instances.tsv",
+  "groups": "flow/reports/nangate45/mempool_group/base/rtlmp_instance_to_cluster.txt",
+  "rtl_fp": "flow/objects/nangate45/mempool_group/base/rtlmp_extract/root.fp.txt",
+  "model": {
+    "mesh_pitch_um": 56.0,
+    "observation_layer": "metal1",
+    "dbu_per_um": 2000.0,
+    "vdd_attachment": "vsrc_loc",
+    "conductance_model": "pdn_extracted"
+  }
+}
